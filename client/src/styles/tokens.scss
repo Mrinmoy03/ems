@@ -1,0 +1,93 @@
+// Theme tokens for WorkTrack
+:root {
+  --background: 216 33% 97%; // Light cool-toned background #f1f5f9
+  --foreground: 222 47% 11%; // Deep slate text
+
+  --card: 0 0% 100%; // Pure crisp white
+  --card-foreground: 222 47% 11%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+
+  --primary: 221 83% 53%; // WorkTrack vibrant blue #2563eb
+  --primary-foreground: 210 40% 98%;
+
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222 47% 11.2%;
+
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222 47% 11.2%;
+
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+
+  --border: 214.3 31.8% 91.4%; // Subtle border #e2e8f0
+  --input: 214.3 31.8% 91.4%;
+  --ring: 221.2 83.2% 53.3%;
+
+  --radius: 0.625rem;
+
+  // Status colors
+  --status-completed: 152 76% 36%;
+  --status-completed-bg: 149 80% 95%;
+  --status-in-progress: 38 92% 50%;
+  --status-in-progress-bg: 48 96% 93%;
+  --status-overdue: 0 84% 60%;
+  --status-overdue-bg: 0 86% 97%;
+  --status-pending: 215 16% 47%;
+  --status-pending-bg: 210 40% 96%;
+
+  // Sidebar specific
+  --sidebar-bg: #0b132b;
+  --sidebar-active-bg: #1c2541;
+  --sidebar-text: #94a3b8;
+  --sidebar-text-active: #ffffff;
+}
+
+.dark {
+  --background: 222 47% 7%; // Deep slate #090e1a
+  --foreground: 210 40% 98%;
+
+  --card: 222 47% 11%; // Dark navy / slate-900 #0f172a
+  --card-foreground: 210 40% 98%;
+
+  --popover: 222 47% 11%;
+  --popover-foreground: 210 40% 98%;
+
+  --primary: 217 91% 60%; // Vibrant blue #3b82f6
+  --primary-foreground: 222 47% 11%;
+
+  --secondary: 217 33% 17%;
+  --secondary-foreground: 210 40% 98%;
+
+  --muted: 217 33% 17%;
+  --muted-foreground: 215 20% 65%;
+
+  --accent: 217 33% 17%;
+  --accent-foreground: 210 40% 98%;
+
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+
+  --border: 217 33% 20%; // #1e293b
+  --input: 217 33% 20%;
+  --ring: 217 91% 60%;
+
+  // Status colors in dark mode
+  --status-completed: 152 76% 45%;
+  --status-completed-bg: 152 76% 12%;
+  --status-in-progress: 38 92% 55%;
+  --status-in-progress-bg: 38 92% 12%;
+  --status-overdue: 0 84% 65%;
+  --status-overdue-bg: 0 84% 15%;
+  --status-pending: 215 20% 65%;
+  --status-pending-bg: 217 33% 17%;
+
+  --sidebar-bg: #060b17;
+  --sidebar-active-bg: #111a2e;
+  --sidebar-text: #94a3b8;
+  --sidebar-text-active: #ffffff;
+}
