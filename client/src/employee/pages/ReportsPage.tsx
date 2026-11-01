@@ -12,6 +12,8 @@ import { useEmployee } from "../context/EmployeeContext"
 import { useResolvedEodReports } from "../hooks/useResolvedEodReports"
 import { EodReportCard } from "../components/reports/EodReportCard"
 import { ReportsPagination } from "../components/reports/ReportsPagination"
+import { DownloadMonthlyEodButton } from "../components/reports/DownloadMonthlyEodButton"
+import { downloadDailyEodPDF } from "../utils/exportEodReport"
 import { toast } from "sonner"
 
 export const ReportsPage: React.FC = () => {
@@ -19,7 +21,7 @@ export const ReportsPage: React.FC = () => {
   const [selectedMonthKey, setSelectedMonthKey] = useState<string>(() => getCurrentMonthKey())
   const [searchQuery, setSearchQuery] = useState<string>("")
   const [currentPage, setCurrentPage] = useState<number>(1)
-  const pageSize = 10
+  const [pageSize, setPageSize] = useState<number>(10)
 
   const currentMonthData = getMonthData(selectedMonthKey)
   const { monthName, year } = currentMonthData
@@ -86,8 +88,13 @@ export const ReportsPage: React.FC = () => {
     }
   }
 
-  const handleDownloadReport = (date: string) => {
-    toast.success(`Exporting EOD report for ${date} (PDF/CSV)`)
+  const handleDownloadReport = (date: string, reportItem?: any) => {
+    const report = reportItem || displayedReports.find(r => r.date === date)
+    if (report) {
+      downloadDailyEodPDF(report)
+    } else {
+      toast.success(`Exporting EOD report for ${date} (PDF)`)
+    }
   }
 
   const handleExportMonthSummary = () => {
@@ -179,10 +186,16 @@ export const ReportsPage: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center gap-2.5 self-end sm:self-auto">
+            <div className="flex items-center gap-2.5 self-end sm:self-auto flex-wrap">
               <span className="text-xs text-slate-500 dark:text-slate-400">
                 Showing <strong className="text-slate-800 dark:text-slate-200">{filteredReports.length}</strong> shift reports
               </span>
+
+              <DownloadMonthlyEodButton
+                monthName={monthName}
+                year={year}
+                reports={filteredReports}
+              />
 
               {displayedReports.length > 0 && (
                 <Button
@@ -233,15 +246,17 @@ export const ReportsPage: React.FC = () => {
           )}
         </CardContent>
 
-        {/* Reusable Pagination Footer */}
+        {/* Reusable Pagination Footer with 10 / 20 / 30 selector */}
         <ReportsPagination
           currentPage={safeCurrentPage}
           totalPages={totalPages}
           totalItems={filteredReports.length}
           pageSize={pageSize}
+          pageSizeOptions={[10, 20, 30]}
           monthName={monthName}
           year={year}
           onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
         />
       </Card>
     </div>

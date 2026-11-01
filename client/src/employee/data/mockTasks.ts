@@ -21,7 +21,7 @@ export const initialMockTasks: EmployeeTask[] = [
     title: "Implement Task Filter & Status Badges",
     description: "Build reactive filter controls for All, Pending, In Progress, Completed, and Overdue with live counts.",
     category: "Design System",
-    deadline: getFutureHours(2.5),
+    deadline: getFutureHours(0.42), // ~25 minutes away for 30m approaching alert
     status: "in-progress",
     progress: 75,
     isSelfCreated: false,
@@ -29,6 +29,10 @@ export const initialMockTasks: EmployeeTask[] = [
     carriedOverNotes: "Progressed to 50% on Oct 14; carried into Oct 15 shift to finalize reactive badge counts.",
     createdAt: getPastHours(6),
     updatedAt: getPastHours(1),
+    projectId: "PRJ-101",
+    projectName: "WorkTrack Enterprise Cloud Suite",
+    projectPartId: "PRT-101-2",
+    projectPartName: "Frontend Portal & Dashboards",
   },
   {
     id: "TSK-202",
@@ -44,6 +48,10 @@ export const initialMockTasks: EmployeeTask[] = [
     carriedOverNotes: "Carried forward from Oct 14 shift; resolving multi-break edge cases and active timer restoration.",
     createdAt: getPastHours(8),
     updatedAt: getPastHours(2),
+    projectId: "PRJ-101",
+    projectName: "WorkTrack Enterprise Cloud Suite",
+    projectPartId: "PRT-101-2",
+    projectPartName: "Frontend Portal & Dashboards",
   },
   {
     id: "TSK-203",
@@ -57,6 +65,10 @@ export const initialMockTasks: EmployeeTask[] = [
     completedAt: getPastHours(3),
     createdAt: getPastHours(10),
     updatedAt: getPastHours(3),
+    projectId: "PRJ-101",
+    projectName: "WorkTrack Enterprise Cloud Suite",
+    projectPartId: "PRT-101-1",
+    projectPartName: "UI/UX Design System & Tokens",
   },
   {
     id: "TSK-204",
@@ -71,6 +83,10 @@ export const initialMockTasks: EmployeeTask[] = [
     carriedOverNotes: "Initial layout designed on Oct 14; carrying forward into Oct 15 shift to hook dynamic timer hours.",
     createdAt: getPastHours(4),
     updatedAt: getPastHours(0.5),
+    projectId: "PRJ-101",
+    projectName: "WorkTrack Enterprise Cloud Suite",
+    projectPartId: "PRT-101-2",
+    projectPartName: "Frontend Portal & Dashboards",
   },
   {
     id: "TSK-205",
@@ -151,7 +167,7 @@ export const initialMockTasks: EmployeeTask[] = [
   {
     id: "TSK-211",
     title: "Timesheet Weekly Summary & Overtime Calculation",
-    description: "Calculate tracked weekly hours against 40h standard baseline and summarize overtime deltas.",
+    description: "Calculate tracked weekly hours against 48h standard baseline (Mon–Sat) and summarize overtime deltas.",
     category: "Operations",
     deadline: getFutureHours(3.5),
     status: "in-progress",

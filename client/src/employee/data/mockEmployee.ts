@@ -30,12 +30,4 @@ export const initialMockNotifications: EmployeeNotification[] = [
     isRead: false,
     type: "leave",
   },
-  {
-    id: "notif-3",
-    title: "Task Reminder",
-    message: "Deadline approaching for 'Fix responsive navigation overflow'.",
-    timestamp: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),
-    isRead: true,
-    type: "reminder",
-  },
 ]

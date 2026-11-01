@@ -36,13 +36,15 @@ import {
   Calendar,
   Layers,
   FileText,
-  ChevronLeft,
-  ChevronRight,
   Edit3,
   Save,
   FileEdit,
   ArrowRightCircle,
+  FolderKanban,
+  ExternalLink,
 } from "lucide-react"
+import { useProjects } from "../../context/ProjectContext"
+import { DataPagination } from "@/components/common/DataPagination"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -71,6 +73,7 @@ export const TaskTable: React.FC<TaskTableProps> = ({
   pageSize = 10,
 }) => {
   const { tasks, taskCounts, updateTaskProgress, updateTaskComment, markTaskComplete, addTask } = useEmployee()
+  const { getProject } = useProjects()
 
   // Filter & Search states
   const [activeFilter, setActiveFilter] = useState<TaskFilterType>("all")
@@ -78,6 +81,12 @@ export const TaskTable: React.FC<TaskTableProps> = ({
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
+  const [currentPageSize, setCurrentPageSize] = useState<number>(pageSize)
+
+  // Keep synced if parent pageSize changes
+  useEffect(() => {
+    setCurrentPageSize(pageSize)
+  }, [pageSize])
 
   // Reset to page 1 whenever active filter or search query changes
   useEffect(() => {
@@ -128,14 +137,14 @@ export const TaskTable: React.FC<TaskTableProps> = ({
   }, [tasks, activeFilter, searchQuery])
 
   // Pagination calculations
-  const totalPages = Math.max(1, Math.ceil(filteredTasks.length / pageSize))
+  const totalPages = Math.max(1, Math.ceil(filteredTasks.length / currentPageSize))
   const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages)
 
   const displayedTasks = useMemo(() => {
     if (!enablePagination) return filteredTasks
-    const startIndex = (safeCurrentPage - 1) * pageSize
-    return filteredTasks.slice(startIndex, startIndex + pageSize)
-  }, [filteredTasks, enablePagination, safeCurrentPage, pageSize])
+    const startIndex = (safeCurrentPage - 1) * currentPageSize
+    return filteredTasks.slice(startIndex, startIndex + currentPageSize)
+  }, [filteredTasks, enablePagination, safeCurrentPage, currentPageSize])
 
   // Open progress update modal
   const handleOpenProgressModal = (task: EmployeeTask) => {
@@ -261,7 +270,8 @@ export const TaskTable: React.FC<TaskTableProps> = ({
               <tr className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 <th className="py-3 px-4 w-10 text-center">#</th>
                 <th className="py-3 px-4">Task Details</th>
-                <th className="py-3 px-4 hidden sm:table-cell">Category</th>
+                <th className="py-3 px-4 hidden sm:table-cell">Project</th>
+                <th className="py-3 px-4 hidden md:table-cell">Category</th>
                 <th className="py-3 px-4">Deadline</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4 w-40">Progress</th>
@@ -271,7 +281,7 @@ export const TaskTable: React.FC<TaskTableProps> = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
               {displayedTasks.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center space-y-2">
                       <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400">
                         <FileText className="h-6 w-6" />
@@ -349,8 +359,27 @@ export const TaskTable: React.FC<TaskTableProps> = ({
                         </div>
                       </td>
 
-                      {/* Category */}
+                      {/* Associated Project */}
                       <td className="py-3 px-4 hidden sm:table-cell">
+                        {task.projectName ? (
+                          <div className="space-y-0.5">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-[11px] font-semibold border border-indigo-200/80 dark:border-indigo-800">
+                              <FolderKanban className="w-2.5 h-2.5 shrink-0" />
+                              <span className="truncate max-w-[130px]">{task.projectName}</span>
+                            </span>
+                            {task.projectPartName && (
+                              <p className="text-[10px] text-slate-400 font-mono pl-0.5 truncate max-w-[130px]">
+                                {task.projectPartName}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">Independent Task</span>
+                        )}
+                      </td>
+
+                      {/* Category */}
+                      <td className="py-3 px-4 hidden md:table-cell">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-medium">
                           <Layers className="h-3 w-3 text-slate-400" />
                           {task.category || "General"}
@@ -432,66 +461,18 @@ export const TaskTable: React.FC<TaskTableProps> = ({
           </table>
         </div>
 
-        {/* Pagination Bar */}
+        {/* Pagination Bar with 10 / 20 / 30 selector */}
         {enablePagination && filteredTasks.length > 0 && (
-          <div className="p-3 sm:px-5 sm:py-3.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400 shrink-0">
-            <div className="text-[11px] sm:text-xs">
-              Showing{" "}
-              <span className="font-semibold text-slate-800 dark:text-slate-200">
-                {(safeCurrentPage - 1) * pageSize + 1}
-              </span>{" "}
-              to{" "}
-              <span className="font-semibold text-slate-800 dark:text-slate-200">
-                {Math.min(safeCurrentPage * pageSize, filteredTasks.length)}
-              </span>{" "}
-              of{" "}
-              <span className="font-semibold text-slate-800 dark:text-slate-200">
-                {filteredTasks.length}
-              </span>{" "}
-              tasks
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={safeCurrentPage <= 1}
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                className="h-8 px-2.5 text-xs border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40"
-              >
-                <ChevronLeft className="h-3.5 w-3.5 mr-1" />
-                Previous
-              </Button>
-
-              <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={cn(
-                      "h-8 min-w-[32px] px-2 rounded-md font-medium transition-colors text-xs border",
-                      safeCurrentPage === page
-                        ? "bg-blue-600 border-blue-600 text-white font-bold shadow-sm"
-                        : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
-                    )}
-                  >
-                    {page}
-                  </button>
-                ))}
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={safeCurrentPage >= totalPages}
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                className="h-8 px-2.5 text-xs border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40"
-              >
-                Next
-                <ChevronRight className="h-3.5 w-3.5 ml-1" />
-              </Button>
-            </div>
-          </div>
+          <DataPagination
+            currentPage={safeCurrentPage}
+            totalPages={totalPages}
+            totalItems={filteredTasks.length}
+            pageSize={currentPageSize}
+            pageSizeOptions={[10, 20, 30]}
+            itemName="tasks"
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setCurrentPageSize}
+          />
         )}
       </CardContent>
 
@@ -639,8 +620,53 @@ export const TaskTable: React.FC<TaskTableProps> = ({
             </DialogDescription>
           </DialogHeader>
 
-          {viewingTask && (
+          {viewingTask && (() => {
+            const taskProject = viewingTask.projectId ? getProject(viewingTask.projectId) : undefined
+            return (
             <div className="space-y-4 text-xs py-2">
+              {/* Associated Project Context */}
+              {viewingTask.projectName && (
+                <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/90 dark:border-indigo-800/80 rounded-lg text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
+                      <FolderKanban className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      {viewingTask.projectName}
+                    </span>
+                    {viewingTask.projectPartName && (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-300 font-semibold">
+                        {viewingTask.projectPartName}
+                      </span>
+                    )}
+                  </div>
+                  {taskProject?.description && (
+                    <p className="text-[11px] text-indigo-800/80 dark:text-indigo-300/80 leading-relaxed">
+                      {taskProject.description}
+                    </p>
+                  )}
+                  {taskProject?.links && taskProject.links.length > 0 && (
+                    <div className="pt-2 border-t border-indigo-200/60 dark:border-indigo-800/60">
+                      <span className="text-[10px] text-indigo-700 dark:text-indigo-300 font-semibold uppercase tracking-wider block mb-1">
+                        Authorized Project References
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {taskProject.links.map(lnk => (
+                          <a
+                            key={lnk.id}
+                            href={lnk.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[10px] hover:bg-indigo-50 dark:hover:bg-indigo-950 transition-colors"
+                          >
+                            <span>{lnk.label}</span>
+                            <ExternalLink className="w-2.5 h-2.5 ml-0.5 text-slate-400" />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {viewingTask.description && (
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-300">
                   <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">Description:</p>
@@ -771,7 +797,8 @@ export const TaskTable: React.FC<TaskTableProps> = ({
                 </div>
               )}
             </div>
-          )}
+            )
+          })()}
 
           <DialogFooter>
             <Button

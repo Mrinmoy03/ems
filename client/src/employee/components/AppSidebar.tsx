@@ -1,6 +1,7 @@
 import React from "react"
 import { NavLink, useNavigate } from "react-router-dom"
 import { useEmployee } from "../context/EmployeeContext"
+import { useAuth } from "../../auth/context/AuthContext"
 import {
   LayoutDashboard,
   CheckSquare,
@@ -13,6 +14,7 @@ import {
   LogOut,
   X,
   Briefcase,
+  ArrowRightLeft,
 } from "lucide-react"
 import {
   Dialog,
@@ -83,10 +85,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ isMobileOpen, setIsMobil
     },
   ]
 
+  const { logout: authLogout } = useAuth()
+
   const handleLogout = () => {
     timer.logout()
+    authLogout()
     setIsLogoutModalOpen(false)
-    navigate("/employee")
+    navigate("/login", { replace: true })
   }
 
   return (
@@ -180,6 +185,33 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ isMobileOpen, setIsMobil
             )
           })}
         </nav>
+
+        {/* Role Switcher */}
+        <div className="p-3 border-t border-slate-800/80 bg-slate-950/40 space-y-1.5">
+          <div className="flex items-center justify-between text-[11px] text-slate-400">
+            <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+              <ArrowRightLeft className="h-3.5 w-3.5 text-blue-400" /> Switch Portal
+            </span>
+            <span className="text-[10px] bg-blue-950 text-blue-300 px-1.5 py-0.2 rounded border border-blue-800">
+              Dev Mode
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-1.5 pt-1">
+            <NavLink
+              to="/admin"
+              className="py-1.5 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white text-[11px] font-medium text-center transition-colors border border-slate-700"
+            >
+              Admin
+            </NavLink>
+            <NavLink
+              to="/super-admin"
+              className="py-1.5 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-800 text-purple-300 hover:text-white text-[11px] font-medium text-center transition-colors border border-purple-800/60"
+            >
+              Super Admin
+            </NavLink>
+          </div>
+        </div>
 
         {/* Footer / Logout */}
         <div className="p-3 border-t border-slate-800/80">

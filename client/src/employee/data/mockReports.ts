@@ -5,7 +5,8 @@ export const initialWeeklyHoursData = [
   { day: "Tue", hours: 8.5, target: 8.0 },
   { day: "Wed", hours: 7.8, target: 8.0 },
   { day: "Thu", hours: 8.4, target: 8.0 },
-  { day: "Fri", hours: 6.5, target: 8.0 }, // Today partial
+  { day: "Fri", hours: 6.5, target: 8.0 },
+  { day: "Sat", hours: 0.0, target: 8.0 }, // Saturday working day (Mon - Sat)
 ]
 
 export const initialMonthlyTrendData = [
@@ -145,7 +146,7 @@ export const getMonthData = (monthKey?: string): MonthData => {
     summary: {
       month: monthName,
       year: yr,
-      workingDays: 20,
+      workingDays: 26, // Monday to Saturday (average 26 working days/month)
       daysPresent: 0,
       totalHoursWorked: 0,
       tasksCompleted: 0,
@@ -168,8 +169,8 @@ export const mockMonthsData: Record<string, MonthData> = {
     summary: {
       month: "October",
       year: 2026,
-      workingDays: 22,
-      daysPresent: 11,
+      workingDays: 27, // Monday to Saturday (31 calendar days - 4 Sundays = 27 working days)
+      daysPresent: 12,
       totalHoursWorked: 89.2,
       tasksCompleted: 24,
       completionRate: 95,
@@ -292,6 +293,23 @@ export const mockMonthsData: Record<string, MonthData> = {
           { id: "TSK-189", title: "In-Memory Mock Stores Setup", category: "Architecture" },
         ],
         summary: "Audited form validation rules with Zod. Prepared employee data models and mock stores.",
+      },
+      {
+        date: "Oct 10, 2026",
+        dayOfWeek: "Saturday",
+        hoursLogged: 8.1,
+        hoursFormatted: "8h 05m",
+        checkIn: "08:50 AM",
+        checkOut: "05:40 PM",
+        breakDuration: "45m",
+        status: "present",
+        tasksCompletedCount: 3,
+        completedTasks: [
+          { id: "TSK-189B", title: "Weekend Deployment Readiness & Bugfixes", category: "Core Features" },
+          { id: "TSK-189A", title: "Saturday Sprint Catch-Up & QA Passes", category: "Quality Assurance" },
+          { id: "TSK-188B", title: "Database Query Indexing & Profiling", category: "Backend" },
+        ],
+        summary: "Saturday shift completed: executed deployment readiness tests, verified query indexing, and resolved high-priority QA backlog.",
       },
       {
         date: "Oct 09, 2026",
@@ -549,6 +567,22 @@ export const mockMonthsData: Record<string, MonthData> = {
         submittedAt: "2026-10-12T17:15:00Z",
       },
       {
+        id: "eod-oct-10",
+        date: "Oct 10, 2026",
+        dayOfWeek: "Saturday",
+        hoursLogged: "8h 05m",
+        hoursWorked: 8.1,
+        tasksCompleted: 3,
+        tasksPending: 1,
+        completedTasks: [
+          { id: "TSK-189B", title: "Weekend Deployment Readiness & Bugfixes", category: "Core Features" },
+          { id: "TSK-189A", title: "Saturday Sprint Catch-Up & QA Passes", category: "Quality Assurance" },
+          { id: "TSK-188B", title: "Database Query Indexing & Profiling", category: "Backend" },
+        ],
+        summary: "Saturday shift completed: executed deployment readiness tests, verified query indexing, and resolved high-priority QA backlog.",
+        submittedAt: "2026-10-10T17:40:00Z",
+      },
+      {
         id: "eod-oct-09",
         date: "Oct 09, 2026",
         dayOfWeek: "Friday",
@@ -677,7 +711,7 @@ export const mockMonthsData: Record<string, MonthData> = {
     summary: {
       month: "September",
       year: 2026,
-      workingDays: 22,
+      workingDays: 26, // Monday to Saturday (30 days - 4 Sundays = 26 working days)
       daysPresent: 22,
       totalHoursWorked: 176.0,
       tasksCompleted: 44,
@@ -1360,7 +1394,7 @@ export const mockMonthsData: Record<string, MonthData> = {
     summary: {
       month: "August",
       year: 2026,
-      workingDays: 21,
+      workingDays: 26, // Monday to Saturday (31 days - 5 Sundays = 26 working days)
       daysPresent: 21,
       totalHoursWorked: 168.0,
       tasksCompleted: 40,
@@ -1548,7 +1582,7 @@ export const mockMonthsData: Record<string, MonthData> = {
     summary: {
       month: "December",
       year: 2025,
-      workingDays: 20,
+      workingDays: 27, // Monday to Saturday (31 days - 4 Sundays = 27 working days)
       daysPresent: 20,
       totalHoursWorked: 160.0,
       tasksCompleted: 36,
@@ -1690,7 +1724,7 @@ export const mockMonthsData: Record<string, MonthData> = {
     summary: {
       month: "November",
       year: 2025,
-      workingDays: 21,
+      workingDays: 25, // Monday to Saturday (30 days - 5 Sundays = 25 working days)
       daysPresent: 21,
       totalHoursWorked: 166.5,
       tasksCompleted: 42,

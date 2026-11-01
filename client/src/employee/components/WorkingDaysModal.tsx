@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { format } from "date-fns"
 import { getCurrentMonthKey, getMonthData } from "../data/mockReports"
 import { YearMonthPicker } from "./YearMonthPicker"
+import { DataPagination } from "@/components/common/DataPagination"
 import { useEmployee } from "../context/EmployeeContext"
 import { isTaskCompletedLate } from "../utils/taskStatus"
 import { formatStandardDate } from "../utils/date"
@@ -38,6 +39,8 @@ export const WorkingDaysModal: React.FC<WorkingDaysModalProps> = ({
   const defaultMonthKey = getCurrentMonthKey()
   const [selectedMonthKey, setSelectedMonthKey] = useState(initialMonthKey || defaultMonthKey)
   const [searchQuery, setSearchQuery] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   // Keep synced if initialMonthKey changes
   React.useEffect(() => {
@@ -45,6 +48,11 @@ export const WorkingDaysModal: React.FC<WorkingDaysModalProps> = ({
       setSelectedMonthKey(initialMonthKey)
     }
   }, [initialMonthKey])
+
+  // Reset page when month or search changes
+  React.useEffect(() => {
+    setCurrentPage(1)
+  }, [selectedMonthKey, searchQuery])
 
   const currentMonthData = getMonthData(selectedMonthKey)
   const { summary, workingDays, monthName, year } = currentMonthData
@@ -126,6 +134,14 @@ export const WorkingDaysModal: React.FC<WorkingDaysModalProps> = ({
     )
   })
 
+  // Pagination calculations
+  const totalPages = Math.max(1, Math.ceil(filteredDays.length / pageSize))
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages)
+  const displayedDays = React.useMemo(() => {
+    const startIndex = (safeCurrentPage - 1) * pageSize
+    return filteredDays.slice(startIndex, startIndex + pageSize)
+  }, [filteredDays, safeCurrentPage, pageSize])
+
   return (
     <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0 overflow-hidden bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
@@ -141,7 +157,7 @@ export const WorkingDaysModal: React.FC<WorkingDaysModalProps> = ({
                   Working Days & Hours Breakdown
                 </DialogTitle>
                 <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
-                  Detailed shift duration and attendance logs for {monthName} {year}
+                  Detailed shift duration and attendance logs for {monthName} {year} • Mon – Sat (6-Day Work Week)
                 </DialogDescription>
               </div>
             </div>
@@ -164,7 +180,7 @@ export const WorkingDaysModal: React.FC<WorkingDaysModalProps> = ({
                 {summary.daysPresent} / {summary.workingDays}
               </span>
               <span className="text-[10px] text-blue-600 dark:text-blue-400 block mt-0.5">
-                Present / Scheduled
+                Present / Scheduled (Mon–Sat)
               </span>
             </div>
 
@@ -244,13 +260,13 @@ export const WorkingDaysModal: React.FC<WorkingDaysModalProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredDays.map((day, idx) => (
+                displayedDays.map((day, idx) => (
                   <tr
                     key={day.date}
                     className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                   >
                     <td className="py-3 px-4 text-center font-mono text-slate-400 text-[11px]">
-                      {idx + 1}
+                      {(safeCurrentPage - 1) * pageSize + idx + 1}
                     </td>
                     <td className="py-3 px-4">
                       <div className="font-semibold text-slate-900 dark:text-slate-100">
@@ -334,6 +350,20 @@ export const WorkingDaysModal: React.FC<WorkingDaysModalProps> = ({
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Bar with 10 / 20 / 30 selector */}
+        {filteredDays.length > 0 && (
+          <DataPagination
+            currentPage={safeCurrentPage}
+            totalPages={totalPages}
+            totalItems={filteredDays.length}
+            pageSize={pageSize}
+            pageSizeOptions={[10, 20, 30]}
+            itemName="working days"
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
 
         {/* Footer */}
         <div className="p-3 px-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 shrink-0">

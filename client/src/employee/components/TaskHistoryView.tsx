@@ -8,8 +8,6 @@ import {
   CheckCircle2,
   Search,
   Layers,
-  ChevronLeft,
-  ChevronRight,
   FileText,
   Info,
   CalendarRange,
@@ -29,6 +27,7 @@ import { getCurrentMonthKey, getMonthData } from "../data/mockReports"
 import { formatStandardDate } from "../utils/date"
 import { TaskStatusBadge } from "./TaskStatusBadge"
 import { YearMonthPicker } from "./YearMonthPicker"
+import { DataPagination } from "@/components/common/DataPagination"
 import { useEmployee } from "../context/EmployeeContext"
 import { isTaskCompletedLate } from "../utils/taskStatus"
 import { cn } from "@/lib/utils"
@@ -51,8 +50,8 @@ export const TaskHistoryView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>("")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [currentPage, setCurrentPage] = useState<number>(1)
+  const [pageSize, setPageSize] = useState<number>(10)
   const [viewingTask, setViewingTask] = useState<SelectedTaskDetails | null>(null)
-  const pageSize = 5 // Show 5 days per page for readability
 
   const monthData = getMonthData(selectedMonthKey)
   const { workingDays, summary, monthName, year } = monthData
@@ -521,69 +520,19 @@ export const TaskHistoryView: React.FC = () => {
         )}
       </div>
 
-      {/* 5. Pagination Footer */}
-      {filteredDays.length > pageSize && (
-        <Card className="border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900">
-          <CardContent className="p-3 sm:px-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
-            <div>
-              Showing{" "}
-              <span className="font-semibold text-slate-800 dark:text-slate-200">
-                {(safeCurrentPage - 1) * pageSize + 1}
-              </span>{" "}
-              to{" "}
-              <span className="font-semibold text-slate-800 dark:text-slate-200">
-                {Math.min(safeCurrentPage * pageSize, filteredDays.length)}
-              </span>{" "}
-              of{" "}
-              <span className="font-semibold text-slate-800 dark:text-slate-200">
-                {filteredDays.length}
-              </span>{" "}
-              days ({monthName} {year})
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={safeCurrentPage <= 1}
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                className="h-8 px-2.5 text-xs border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40"
-              >
-                <ChevronLeft className="h-3.5 w-3.5 mr-1" />
-                Previous
-              </Button>
-
-              <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={cn(
-                      "h-8 min-w-[32px] px-2 rounded-md font-medium transition-colors text-xs border",
-                      safeCurrentPage === page
-                        ? "bg-blue-600 border-blue-600 text-white font-bold shadow-sm"
-                        : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
-                    )}
-                  >
-                    {page}
-                  </button>
-                ))}
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={safeCurrentPage >= totalPages}
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                className="h-8 px-2.5 text-xs border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40"
-              >
-                Next
-                <ChevronRight className="h-3.5 w-3.5 ml-1" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* 5. Pagination Footer with 10 / 20 / 30 selector */}
+      <Card className="border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+        <DataPagination
+          currentPage={safeCurrentPage}
+          totalPages={totalPages}
+          totalItems={filteredDays.length}
+          pageSize={pageSize}
+          pageSizeOptions={[10, 20, 30]}
+          itemName="days"
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+        />
+      </Card>
 
       {/* 6. Historical Task Details Modal */}
       <Dialog

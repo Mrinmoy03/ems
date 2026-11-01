@@ -1,6 +1,7 @@
 import React, { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useEmployee } from "../context/EmployeeContext"
+import { useAuth } from "../../auth/context/AuthContext"
 import { getGreeting, formatDashboardDate, formatRelativeTime } from "../utils/date"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -22,6 +23,8 @@ import {
   LogOut,
   Calendar,
   CheckCheck,
+  Check,
+  Plus,
 } from "lucide-react"
 
 interface DashboardHeaderProps {
@@ -35,11 +38,20 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({ onMobileMenuTo
     unreadNotificationCount,
     markNotificationRead,
     markAllNotificationsRead,
+    addNotification,
     timer,
   } = useEmployee()
+  const { user: authUser, logout: authLogout } = useAuth()
 
   const navigate = useNavigate()
   const [currentDate] = useState(() => new Date())
+
+  // New notifications will ALWAYS show on top (sorted by timestamp descending)
+  const sortedNotifications = React.useMemo(() => {
+    return [...notifications].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    )
+  }, [notifications])
 
   return (
     <header className="h-16 border-b border-slate-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md sticky top-0 z-30 px-4 sm:px-6 flex items-center justify-between shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-colors">
@@ -93,13 +105,19 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({ onMobileMenuTo
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80 p-0 shadow-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
             <div className="p-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/50">
-              <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+              <span className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                <Bell className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                 Notifications
+                {notifications.length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.2 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-semibold rounded-full">
+                    {notifications.length}
+                  </span>
+                )}
               </span>
               {unreadNotificationCount > 0 && (
                 <button
                   onClick={markAllNotificationsRead}
-                  className="text-[11px] text-blue-600 dark:text-blue-400 hover:text-blue-700 font-medium flex items-center gap-1"
+                  className="text-[11px] text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium flex items-center gap-1"
                 >
                   <CheckCheck className="h-3 w-3" />
                   Mark all read
@@ -107,25 +125,29 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({ onMobileMenuTo
               )}
             </div>
             <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
-              {notifications.length === 0 ? (
-                <div className="p-6 text-center text-xs text-slate-400">
-                  No notifications
+              {sortedNotifications.length === 0 ? (
+                <div className="py-8 px-4 text-center flex flex-col items-center justify-center text-slate-400">
+                  <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-full mb-2">
+                    <CheckCheck className="h-5 w-5" />
+                  </div>
+                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    All caught up!
+                  </p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                    No active notifications
+                  </p>
                 </div>
               ) : (
-                notifications.map(n => (
+                sortedNotifications.map(n => (
                   <div
                     key={n.id}
-                    onClick={() => markNotificationRead(n.id)}
-                    className={`p-3 text-xs cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-start gap-2.5 ${
-                      !n.isRead ? "bg-blue-50/40 dark:bg-blue-950/30" : ""
-                    }`}
+                    className="p-3 text-xs transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-start gap-2.5 bg-blue-50/40 dark:bg-blue-950/30 group"
                   >
+                    <div className="h-2 w-2 rounded-full mt-1.5 shrink-0 bg-blue-600 dark:bg-blue-400" />
                     <div
-                      className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${
-                        !n.isRead ? "bg-blue-600 dark:bg-blue-400" : "bg-transparent"
-                      }`}
-                    />
-                    <div className="flex-1 min-w-0">
+                      className="flex-1 min-w-0 cursor-pointer"
+                      onClick={() => markNotificationRead(n.id)}
+                    >
                       <p className="font-semibold text-slate-800 dark:text-slate-200 text-xs">
                         {n.title}
                       </p>
@@ -136,10 +158,40 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({ onMobileMenuTo
                         {formatRelativeTime(n.timestamp)}
                       </p>
                     </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        markNotificationRead(n.id)
+                      }}
+                      title="Mark as read & remove"
+                      className="opacity-40 group-hover:opacity-100 hover:text-blue-600 dark:hover:text-blue-400 p-1 rounded transition-opacity"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 ))
               )}
             </div>
+
+            {/* Quick Simulate Trigger */}
+            {sortedNotifications.length === 0 && (
+              <div className="p-2 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() =>
+                    addNotification({
+                      title: "Sprint Update",
+                      message: "Engineering leads posted updated sprint deliverables for this week.",
+                      type: "task",
+                    })
+                  }
+                  className="text-[10px] text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 font-medium flex items-center gap-1 py-0.5 px-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <Plus className="h-3 w-3" />
+                  Simulate New Notification
+                </button>
+              </div>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -159,10 +211,10 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({ onMobileMenuTo
           <DropdownMenuContent align="end" className="w-56 p-1 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
             <DropdownMenuLabel className="p-2">
               <p className="font-bold text-slate-900 dark:text-slate-100 text-xs">
-                {employee.firstName} {employee.lastName}
+                {authUser?.name || `${employee.firstName} ${employee.lastName}`}
               </p>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate">
-                {employee.email}
+                {authUser?.email || employee.email}
               </p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="dark:bg-slate-800" />
@@ -180,8 +232,12 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({ onMobileMenuTo
             </DropdownMenuItem>
             <DropdownMenuSeparator className="dark:bg-slate-800" />
             <DropdownMenuItem
-              onClick={() => timer.logout()}
-              className="text-red-600 dark:text-red-400 focus:text-red-700 dark:focus:text-red-300 focus:bg-red-50 dark:focus:bg-red-950/40"
+              onClick={() => {
+                timer.logout()
+                authLogout()
+                navigate("/login", { replace: true })
+              }}
+              className="cursor-pointer text-red-600 dark:text-red-400 focus:text-red-700 dark:focus:text-red-300 focus:bg-red-50 dark:focus:bg-red-950/40"
             >
               <LogOut className="h-3.5 w-3.5 mr-2" />
               End Shift & Logout

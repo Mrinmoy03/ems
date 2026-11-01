@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const projectController_1 = require("../controllers/projectController");
+const auth_1 = require("../middleware/auth");
+const roleGuard_1 = require("../middleware/roleGuard");
+const router = (0, express_1.Router)();
+router.get("/", auth_1.authenticateToken, projectController_1.getAllProjects);
+router.get("/:id", auth_1.authenticateToken, projectController_1.getProjectById);
+router.post("/", auth_1.authenticateToken, roleGuard_1.isAdminOrSuperAdmin, projectController_1.createProject);
+router.patch("/parts/:partId/progress", auth_1.authenticateToken, projectController_1.updateProjectPartProgress);
+exports.default = router;

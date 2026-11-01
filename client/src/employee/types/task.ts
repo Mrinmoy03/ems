@@ -18,6 +18,12 @@ export interface EmployeeTask {
   carriedOverNotes?: string // Progress notes when carried forward
   createdAt: string
   updatedAt: string
+
+  // Project Association (Optional)
+  projectId?: string
+  projectName?: string
+  projectPartId?: string
+  projectPartName?: string
 }
 
 export type TaskFilterType = "all" | "pending" | "in-progress" | "completed" | "overdue"

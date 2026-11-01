@@ -1,6 +1,7 @@
-import React from "react"
+import React, { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useEmployee } from "../context/EmployeeContext"
+import { useProjects } from "../../context/ProjectContext"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,7 +17,7 @@ import {
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { PlusCircle, ArrowLeft, Info } from "lucide-react"
+import { PlusCircle, ArrowLeft, Info, FolderKanban } from "lucide-react"
 
 const addTaskSchema = z.object({
   title: z.string().min(3, "Task title must be at least 3 characters").max(100),
@@ -29,7 +30,13 @@ type AddTaskFormData = z.infer<typeof addTaskSchema>
 
 export const AddTaskPage: React.FC = () => {
   const { addTask } = useEmployee()
+  const { projects } = useProjects()
   const navigate = useNavigate()
+
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("none")
+  const [selectedPartId, setSelectedPartId] = useState<string>("none")
+
+  const activeProject = projects.find(p => p.id === selectedProjectId)
 
   const {
     control,
@@ -46,12 +53,18 @@ export const AddTaskPage: React.FC = () => {
   })
 
   const onSubmit = (data: AddTaskFormData) => {
+    const partMatch = activeProject?.parts.find(p => p.id === selectedPartId)
+
     addTask({
       title: data.title,
       category: data.category,
       deadline: new Date(data.deadline).toISOString(),
       description: data.description,
       isSelfCreated: true,
+      projectId: selectedProjectId !== "none" ? selectedProjectId : undefined,
+      projectName: selectedProjectId !== "none" ? activeProject?.name : undefined,
+      projectPartId: selectedPartId !== "none" ? selectedPartId : undefined,
+      projectPartName: partMatch?.name,
     })
     navigate("/employee/tasks")
   }
@@ -152,6 +165,60 @@ export const AddTaskPage: React.FC = () => {
                 <p className="text-[11px] text-blue-700 mt-0.5">
                   Tasks require an explicit deadline. Allocated duration is not tracked; if a task remains incomplete after its deadline, it will automatically register as overdue.
                 </p>
+              </div>
+            </div>
+
+            {/* Optional Project Association */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold flex items-center gap-1.5">
+                  <FolderKanban className="w-3.5 h-3.5 text-indigo-500" />
+                  Associated Project (Optional)
+                </Label>
+                <Select
+                  value={selectedProjectId}
+                  onValueChange={val => {
+                    setSelectedProjectId(val)
+                    setSelectedPartId("none")
+                  }}
+                >
+                  <SelectTrigger className="text-xs h-9">
+                    <SelectValue placeholder="Select Project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Independent Task (No Project)</SelectItem>
+                    {projects
+                      .filter(p => p.status === "in-progress" || p.status === "planning")
+                      .map(p => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name} ({p.code})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">
+                  Project Part / Work Package
+                </Label>
+                <Select
+                  value={selectedPartId}
+                  onValueChange={setSelectedPartId}
+                  disabled={selectedProjectId === "none"}
+                >
+                  <SelectTrigger className="text-xs h-9">
+                    <SelectValue placeholder="Select Part" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">General Project Scope</SelectItem>
+                    {activeProject?.parts.map(part => (
+                      <SelectItem key={part.id} value={part.id}>
+                        {part.name} ({part.weight}%)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

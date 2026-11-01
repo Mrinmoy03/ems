@@ -14,8 +14,6 @@ import {
   Clock,
   Search,
   Download,
-  ChevronLeft,
-  ChevronRight,
   ExternalLink,
 } from "lucide-react"
 import { format } from "date-fns"
@@ -23,6 +21,7 @@ import { getCurrentMonthKey, getMonthData } from "../data/mockReports"
 import { formatStandardDate } from "../utils/date"
 import { YearMonthPicker } from "../components/YearMonthPicker"
 import { WorkingDaysModal } from "../components/WorkingDaysModal"
+import { DataPagination } from "@/components/common/DataPagination"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
@@ -39,8 +38,8 @@ export const TimesheetPage: React.FC = () => {
   const [selectedMonthKey, setSelectedMonthKey] = useState<string>(() => getCurrentMonthKey())
   const [searchQuery, setSearchQuery] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [isWorkingDaysModalOpen, setIsWorkingDaysModalOpen] = useState(false)
-  const pageSize = 10
 
   // Live completed tasks from EmployeeContext
   const liveCompletedTasks = useMemo(() => {
@@ -127,6 +126,22 @@ export const TimesheetPage: React.FC = () => {
         { id: "TSK-191", title: "Audited Form Validation Rules with Zod", category: "Security" },
         { id: "TSK-190", title: "Prepared Employee Data Models", category: "Architecture" },
         { id: "TSK-189", title: "In-Memory Mock Stores Setup", category: "Architecture" },
+      ],
+    },
+    {
+      id: "shift-oct-10",
+      date: "Oct 10 (Sat)",
+      dayOfWeek: "Saturday",
+      inTime: "08:50 AM",
+      outTime: "05:40 PM",
+      breakDuration: "45 mins",
+      totalHours: "8h 05m",
+      status: "Completed",
+      tasksCompletedCount: 3,
+      completedTasks: [
+        { id: "TSK-189B", title: "Weekend Deployment Readiness & Bugfixes", category: "Core Features" },
+        { id: "TSK-189A", title: "Saturday Sprint Catch-Up & QA Passes", category: "Quality Assurance" },
+        { id: "TSK-188B", title: "Database Query Indexing & Profiling", category: "Backend" },
       ],
     },
     {
@@ -238,12 +253,12 @@ export const TimesheetPage: React.FC = () => {
   const activeMetrics = useMemo(() => {
     if (activePeriod === "weekly") {
       return {
-        title: "Active Work Week (Oct 08 – Oct 14)",
-        totalHours: "39.4h",
-        daysPresent: "5 / 5",
+        title: "Active Work Week (Monday – Saturday)",
+        totalHours: "47.5h",
+        daysPresent: "6 / 6",
         avgHours: "7.9h",
-        tasksCount: 17,
-        statusNote: "+1.4h vs weekly target",
+        tasksCount: 20,
+        statusNote: "+1.5h vs 48h weekly target",
       }
     }
     const mData = getMonthData(activePeriod)
@@ -570,67 +585,17 @@ export const TimesheetPage: React.FC = () => {
               </table>
             </CardContent>
 
-            {/* Pagination Controls for Monthly Views */}
-            {filteredItems.length > pageSize && (
-              <div className="p-3 sm:px-5 sm:py-3.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
-                <div>
-                  Showing{" "}
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    {(safeCurrentPage - 1) * pageSize + 1}
-                  </span>{" "}
-                  to{" "}
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    {Math.min(safeCurrentPage * pageSize, filteredItems.length)}
-                  </span>{" "}
-                  of{" "}
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    {filteredItems.length}
-                  </span>{" "}
-                  shifts
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={safeCurrentPage <= 1}
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    className="h-8 px-2.5 text-xs border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40"
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5 mr-1" />
-                    Previous
-                  </Button>
-
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                      <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        className={cn(
-                          "h-8 min-w-[32px] px-2 rounded-md font-medium transition-colors text-xs border",
-                          safeCurrentPage === page
-                            ? "bg-blue-600 border-blue-600 text-white font-bold shadow-sm"
-                            : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
-                        )}
-                      >
-                        {page}
-                      </button>
-                    ))}
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={safeCurrentPage >= totalPages}
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    className="h-8 px-2.5 text-xs border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40"
-                  >
-                    Next
-                    <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                  </Button>
-                </div>
-              </div>
-            )}
+            {/* Pagination Controls with 10 / 20 / 30 selector */}
+            <DataPagination
+              currentPage={safeCurrentPage}
+              totalPages={totalPages}
+              totalItems={filteredItems.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 30]}
+              itemName="shifts"
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </Card>
         </div>
       </div>

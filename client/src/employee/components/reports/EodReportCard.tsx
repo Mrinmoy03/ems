@@ -25,7 +25,7 @@ interface EodReportCardProps {
   report: DailyEodReport
   isExpanded: boolean
   onToggle: () => void
-  onDownload: (date: string) => void
+  onDownload: (date: string, report?: DailyEodReport) => void
   timerSessionState?: WorkSessionState
 }
 
@@ -176,11 +176,11 @@ export const EodReportCard: React.FC<EodReportCardProps> = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => onDownload(report.date)}
-            className="h-7 px-2.5 text-xs border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 gap-1 shadow-2xs"
+            onClick={() => onDownload(report.date, report)}
+            className="h-7 px-2.5 text-xs border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 gap-1 shadow-2xs hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
           >
             <Download className="h-3 w-3" />
-            PDF
+            Export
           </Button>
         </div>
       </div>

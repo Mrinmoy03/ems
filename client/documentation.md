@@ -1,15 +1,15 @@
-# WorkTrack — Employee Dashboard Frontend Documentation
+# WorkTrack — Enterprise Management System Technical Documentation
 
-This document provides a comprehensive record of the WorkTrack Employee Dashboard implementation, all work completed, the complete list of features built, architectural decisions, and the strict **DRY (Don't Repeat Yourself)** component design system.
+This document serves as the **single source of truth** for all WorkTrack frontend architecture, feature specifications, business rules, and technical implementations across the **Employee Dashboard**, the **Admin Panel**, and the **Project Management System**.
 
 ---
 
 ## 1. Project Overview & Scope
 
-**WorkTrack** is a scalable employee management system designed with three core module boundaries:
-1. `employee/` — **Fully Implemented in this phase**
-2. `admin/` — Modular placeholder boundary with documentation (`README.md`)
-3. `super-admin/` — Modular placeholder boundary with documentation (`README.md`)
+**WorkTrack** is a scalable employee management and project governance platform designed with three core module boundaries:
+1. `src/employee/` — **Fully Implemented**: Task execution, live punch/timer, timesheets, modular EOD reports, leave applications, project deliverable context.
+2. `src/admin/` — **Fully Implemented**: Executive KPI dashboard, employee directory & credential management, department hierarchy, organization-wide task orchestration, workforce attendance telemetry, unified EOD inspection, view-only leave management, and project management suite (`/admin/projects`).
+3. `src/super-admin/` — **Phase 3 Roadmap Placeholder**: Executive platform boundary with role-switch controls.
 
 This frontend phase delivers an interactive, production-quality dashboard prototype using strict TypeScript, React 19, Tailwind CSS, SCSS tokens, shadcn/ui primitives, Recharts, and React Router.
 
@@ -568,3 +568,448 @@ To prepare for backend introduction, all hardcoded dates, periods, and fallbacks
    - Structured endpoints map `API_ENDPOINTS` for Authentication, Employee Profile, Tasks, Attendance, Leave Management, and Reports.
 4. **Context-Driven State Boundary**:
    - All state mutations (tasks, leaves, profile, timer, notifications) flow through `EmployeeContext`, ensuring a seamless plug-and-play migration to REST/GraphQL API services when backend endpoints are connected.
+
+---
+
+## 10. Working Days & Weekly Schedule Policy (Monday to Saturday)
+
+### Work Week Schedule & Norms
+The system operates on a **6-day working week** policy:
+- **Active Working Days**: Monday through Saturday.
+- **Weekly Off / Rest Day**: Sunday (sole weekly off).
+- **Standard Daily Shift**: 8.0 hours / day.
+- **Standard Weekly Baseline**: **48.0 hours / week** (6 days × 8.0h/day).
+
+### System-Wide Implementation Details
+1. **Weekly Hours Worked Analytics (`HoursWorkedChart.tsx`)**:
+   - Bar chart renders all 6 active working days (`Mon`, `Tue`, `Wed`, `Thu`, `Fri`, `Sat`).
+   - Header badge indicates `Target: 8.0h / day (Mon – Sat)`.
+   - Dynamic pace tracker calculates cumulative hours against the **48h Standard** weekly target.
+   - Smooth `isAnimationActive={false}` transition ensures instant chart responsiveness.
+2. **Attendance & Timesheets (`TimesheetPage.tsx`)**:
+   - Weekly shift log captures Monday to Saturday shifts (including Saturday Oct 10 shift).
+   - Weekly KPI highlights `Active Work Week (Monday – Saturday)` with `6 / 6` days present and progress evaluated against the 48h weekly threshold.
+3. **Monthly Working Days Calculation (`mockReports.ts`)**:
+   - Monthly scheduled working days dynamically exclude Sundays:
+     - **October 2026**: 27 scheduled working days (31 calendar days - 4 Sundays).
+     - **September 2026**: 26 scheduled working days (30 calendar days - 4 Sundays).
+     - **August 2026**: 26 scheduled working days (31 calendar days - 5 Sundays).
+     - **December 2025**: 27 scheduled working days (31 calendar days - 4 Sundays).
+     - **November 2025**: 25 scheduled working days (30 calendar days - 5 Sundays).
+     - Safe fallback default: 26 working days.
+4. **Working Days Breakdown Modal (`WorkingDaysModal.tsx`)**:
+   - Subtitle explicitly reflects: `Mon – Sat (6-Day Work Week)`.
+   - KPI metric strip clarifies: `Present / Scheduled (Mon–Sat)`.
+5. **Year & Month Selector (`YearMonthPicker.tsx`)**:
+   - Weekly quick selector badge updated to 6 days.
+
+---
+
+## 11. Login Credentials & Security Policy (Admin-Managed Only)
+
+### Business Rule & Policy Definition
+- **Employees Cannot Change Login Credentials**:
+  - Direct employee modification or resetting of login credentials (username, email, passwords, access tokens, SSO linkages) is strictly prohibited.
+  - All employee credentials and system permissions are centrally provisioned, updated, and managed exclusively by **Organization Administrators** and **Corporate IT**.
+
+### Implementation Details ([`SettingsPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/employee/pages/SettingsPage.tsx))
+- **Elimination of Password Modification Inputs**:
+  - Removed editable "Current Password" and "New Password" text inputs from the settings interface.
+- **Admin-Managed Security & Credentials Card**:
+  - Prominent badge: `Admin Managed` (`ShieldCheck`).
+  - Clear administrative policy callout:
+    > "Employees cannot change or reset login credentials. All user login identifiers, passwords, and system access permissions are centrally provisioned and managed by Organization Administrators and Corporate IT."
+  - **Read-Only Account Status Grid**:
+    - **Login Identifier / Email**: `alex.morgan@worktrack.io` (read-only display).
+    - **Password Status**: `••••••••••••••••` (Locked · Managed by Org Admin).
+    - **Authentication Provider**: `Enterprise SSO / WorkTrack Auth`.
+    - **Credential Assistance**: Clear guidance directing the employee to the IT Helpdesk or HR Administrator.
+- **Preference Persistence**:
+  - Form submission button updated to `Save Preferences`, strictly scoped to persisting appearance and alert notification toggles without touching credentials.
+
+---
+
+## 12. Notification Bar Lifecycle & Queue Dynamics
+
+### Core Principles & User Experience
+1. **Removal of Read Notifications from Notification Bar**:
+   - The notification popover dropdown (`DashboardHeader.tsx`) serves strictly as an **active, actionable notification feed**.
+   - When an individual notification is marked as read (by clicking on the item or its check action button), it is immediately removed from the active notification bar feed via `markNotificationRead(id)`.
+   - When the user clicks **"Mark all read"**, all notifications are marked read and cleared simultaneously via `markAllNotificationsRead()`.
+   - The unread badge on the header Bell icon synchronizes in real time and disappears completely when the bar is empty (`unreadNotificationCount === 0`).
+2. **Clean Empty State**:
+   - When all notifications are cleared, the dropdown displays a clean, reassuring empty state:
+     - Icon: `CheckCheck` in an emerald accent pill.
+     - Title: `All caught up!`
+     - Subtitle: `No active notifications`.
+     - Includes a subtle `Simulate New Notification` action for rapid testing and demonstration.
+3. **New Notifications Always Show on Top**:
+   - **Chronological Queue Inversion**: Whenever a new notification is generated, it is prepended to the array (`[newNotification, ...prev]`).
+   - **Strict Timestamp Sorting**: The notification list is dynamically sorted by timestamp in descending order:
+     ```ts
+     const sortedNotifications = [...notifications].sort(
+       (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+     )
+     ```
+   - This guarantees that **new notifications will always show on top** of the notification bar, even under rapid concurrent updates.
+4. **Context-Driven Notification Triggers ([`EmployeeContext.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/employee/context/EmployeeContext.tsx))**:
+   - Exposed `addNotification` in `useEmployee()`.
+   - Automatically dispatches high-priority notifications placed at the top of the bar when:
+     - A new task is created via `addTask()`.
+     - A task is completed (100% milestone reached) via `updateTaskProgress()`.
+     - A leave application is submitted via `applyForLeave()`.
+
+---
+
+## 13. Reactive Notification Preferences & Automated Alert Engines
+
+### Architecture & Persistence
+Notification settings in [`SettingsPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/employee/pages/SettingsPage.tsx) are fully wired to reactive alert engines in [`EmployeeContext.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/employee/context/EmployeeContext.tsx) and persisted across browser sessions via `localStorage` (`"worktrack_notification_preferences"`):
+```ts
+export interface NotificationPreferences {
+  taskDeadlineApproaching: boolean // 30 min before deadline
+  lunchBreakReminder: boolean // Alert if lunch break exceeds 60 min
+  eodAutoDigest: boolean // Display summary of completed assignments at workday wrap-up
+}
+```
+
+### The Three Automated Alert Engines
+1. **Task Deadline Approaching Engine (30-Minute Threshold)**:
+   - **Trigger**: Every 10 seconds, active incomplete deliverables (`progress < 100` and `status !== 'completed'`) are inspected.
+   - **Condition**: If remaining deadline time is between 0 and 30 minutes (`0 < diffMs <= 30 * 60 * 1000`), an alert is triggered.
+   - **Behavior**:
+     - Prevents duplicate alerts per task session using a dedicated session ref (`alertedDeadlineTaskIdsRef`).
+     - Dispatches a high-priority notification placed directly on top of the notification bar.
+     - Displays an actionable Sonner warning toast informing the employee of the remaining minutes.
+2. **Lunch Break Active Reminder Engine (> 60 Minutes)**:
+   - **Trigger**: Monitored continuously during `sessionState === 'on-break'`.
+   - **Condition**: If active break duration exceeds 60 minutes (3,600 seconds) without shift resumption.
+   - **Behavior**:
+     - Dispatches an urgent reminder notification to the notification bar (`"Lunch Break Exceeded"`).
+     - Fires a warning toast prompting the user to click **"Resume Shift"** to continue billable hours tracking.
+     - Automatically resets its alert flag whenever a new lunch break begins.
+3. **Daily EOD Auto-Digest Engine (Workday Wrap-Up)**:
+   - **Trigger**: Listens for workday completion / logout (`sessionState === 'logged-out'`).
+   - **Condition**: Employee clicks "End Shift & Logout" in the timer confirmation modal.
+   - **Behavior**:
+     - Compiles a comprehensive digest: total net hours logged today (e.g. `8h 15m`) and total deliverables marked 100% complete during the workday.
+     - Dispatches a celebratory summary notification to the top of the notification bar.
+     - Fires a success toast confirming shift wrap-up and audit readiness.
+
+---
+
+## 14. Phase 2: Admin Panel Implementation Architecture
+
+### 14.1 Architectural Overview & Module Boundaries
+Phase 2 expands WorkTrack from an employee dashboard into a cohesive multi-tiered organizational management platform. The Admin Portal is architected under `src/admin/` with its own state engine ([`AdminContext.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/context/AdminContext.tsx)), dark navy executive sidebar ([`AdminSidebar.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/AdminSidebar.tsx)), enterprise header ([`AdminHeader.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/AdminHeader.tsx)), and full interactive dialogs and pages.
+
+- **Role Boundaries & Entitlements**:
+  - **Admin CAN**:
+    - Provision new employee accounts and generate secure initial login keys ([`EmployeeFormDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/EmployeeFormDialog.tsx)).
+    - Edit employee profiles, designations, department assignments, and contact metadata.
+    - Deactivate or delete employee accounts with confirmation dialogs.
+    - Create, modify, and archive departments with duplicate code prevention ([`DepartmentDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/DepartmentDialog.tsx)).
+    - Dispatch tasks and multi-assign deliverables across multiple employees simultaneously ([`TaskAssignmentDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/TaskAssignmentDialog.tsx)).
+    - **Modify task deadlines**: Permitted strictly when accompanied by a mandatory documented business justification, permanently appended to an audit history log ([`DeadlineChangeDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/DeadlineChangeDialog.tsx)).
+    - View organization-wide attendance telemetry, daily check-in timestamps, and break compliance ([`AttendancePage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/AttendancePage.tsx)).
+    - Inspect aggregated End-of-Day (EOD) work reports and milestone velocity ([`ReportsPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/ReportsPage.tsx)).
+    - View employee leave applications (**Strictly View-Only**; [`LeaveManagementPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/LeaveManagementPage.tsx)).
+    - Submit administrative recommendations and observations addressed to the Super Admin ([`AdminCommentDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/AdminCommentDialog.tsx)).
+  - **Admin CANNOT**:
+    - Approve or reject employee leave applications (strictly reserved for Super Admin; all decision buttons are omitted, and prominent legal/compliance notices are displayed).
+    - Override global audit purge policies.
+    - Allocate fixed duration or "Time Allotted" properties to tasks (strictly deadline-only model).
+  - **Employee Restriction**:
+    - Employees cannot alter their primary login credentials; administrators hold authoritative credential provisioning controls.
+
+### 14.2 Routing & Navigation Structure
+- `/admin` — Operations & Org Overview Dashboard ([`AdminDashboardPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/AdminDashboardPage.tsx))
+- `/admin/employees` — Workforce Directory & Access Management ([`EmployeesPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/EmployeesPage.tsx))
+- `/admin/employees/:employeeId` — Employee Profile Details (7 Tabs: Overview, Tasks, Attendance, Reports, Leave, Performance, Notes; [`EmployeeDetailsPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/EmployeeDetailsPage.tsx))
+- `/admin/departments` — Department Architecture & Team Leads ([`DepartmentsPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/DepartmentsPage.tsx))
+- `/admin/tasks` — Task & Milestone Orchestration with Multi-Assignee & Deadline Audits ([`TasksPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/TasksPage.tsx))
+- `/admin/attendance` — Workforce Attendance & Time Logs with Monday–Saturday 48h Baseline ([`AttendancePage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/AttendancePage.tsx))
+- `/admin/reports` — EOD Deliverables & Deliverable Audits ([`ReportsPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/ReportsPage.tsx))
+- `/admin/leave` — Leave Applications & Schedule Requests (View-Only with Super Admin notice; [`LeaveManagementPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/LeaveManagementPage.tsx))
+- `/admin/settings` — System Administration & Policy Configuration ([`AdminSettingsPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/AdminSettingsPage.tsx))
+- `/super-admin` — Phase 3 Executive Governance Plane Placeholder ([`SuperAdminPlaceholderPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/super-admin/SuperAdminPlaceholderPage.tsx))
+
+### 14.3 Strict Business Rules Enforced
+1. **Mandatory Deadline Modification Audit**:
+   - `updateTaskDeadline(taskId, newDeadline, reason)`: Validates that `reason` is non-empty. Creates a `DeadlineChangeRecord` with timestamp and actor name.
+2. **Multi-Employee Task Assignment with No "Time Allotted"**:
+   - Admins can assign a task to one or multiple employees simultaneously (`assignedTo: string[]`). No time allocation or duration properties exist in the model.
+3. **View-Only Leave Requests for Admin**:
+   - Prominent notification banners emphasize Super Admin exclusivity.
+   - Admins use `AdminCommentDialog` to send recommendations to the Super Admin.
+4. **Monday through Saturday Schedule Baseline**:
+   - 6-day work week (Monday to Saturday), 8 hours/day, 48 hours/week standard. Sundays designated as non-working rest day.
+
+### 14.4 Dedicated Employee Task Inspection & Self-Assignment Indicator
+1. **Interactive Entry Points**:
+   - In `/admin/employees` ([`EmployeeTable.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/EmployeeTable.tsx)):
+     - Added **"Check Dedicated Tasks"** option with icon `<CheckSquare />` to each row's action dropdown menu.
+     - The **"Active Tasks" count pill** is now an interactive button; clicking directly opens the dedicated tasks modal for that specific employee.
+2. **Dedicated Tasks Modal ([`EmployeeDedicatedTasksDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/EmployeeDedicatedTasksDialog.tsx))**:
+   - Displays all tasks assigned to the chosen employee with real-time status filter tabs (`All`, `In Progress`, `Pending`, `Completed`, `Overdue`) and search filtering.
+   - Allows the admin to click **"Modify Deadline"** directly within this modal, opening [`DeadlineChangeDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/DeadlineChangeDialog.tsx) with mandatory business reason logging.
+   - Includes direct **"Assign Task"** button pre-populating this employee.
+3. **Self-Assigned vs Admin-Assigned Indicators**:
+   - Distinguishes tasks created by the employee themselves (`task.isSelfCreated === true` or `task.assignedBy` matches employee name/id/"self") from administrative tasks.
+   - Self-assigned tasks render a distinct violet badge: `<Badge className="bg-purple-100 text-purple-700 ...">Self-Assigned by Employee</Badge>`.
+   - Admin-assigned tasks render an outline badge: `<Badge variant="outline">Assigned by Sarah Jenkins</Badge>`.
+   - The indicator is also rendered inside [`EmployeeTaskOverview.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/EmployeeTaskOverview.tsx) on the employee details profile page.
+
+### 14.5 Unified EOD Reports Architecture Matching Employee Experience
+1. **Consistent Modular Rendering**:
+   - Both the organizational EOD reports page ([`ReportsPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/ReportsPage.tsx)) and the employee profile EOD tab ([`EmployeeDetailsPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/EmployeeDetailsPage.tsx)) now utilize the exact modular [`EodReportCard.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/employee/components/reports/EodReportCard.tsx).
+2. **Rich EOD Report Anatomy**:
+   - **Shift Attendance Grid**: Punch In, Punch Out, Lunch Break duration, and Net Shift Hours.
+   - **Completed Deliverables**: Title, category, deadline, completion timestamp, progress badge, and late deliverable warnings.
+   - **Carried-Forward Tasks**: In-progress deliverables carrying into the next shift.
+   - **Blockers & Notes**: Prominent amber alert for logged dependencies and blockers.
+3. **Multi-Year / Multi-Month Filtering**:
+   - Integrated [`YearMonthPicker.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/employee/components/YearMonthPicker.tsx) with hierarchical year and month selection.
+   - Added global search across dates and task deliverables, plus an **"Expand All / Collapse All"** toggle.
+4. **Monthly and Daily EOD Report Downloads**:
+   - Built [`exportEodReport.ts`](file:///d:/00_VAMA_WORK/ems/client/src/employee/utils/exportEodReport.ts) providing client-side CSV generation (`downloadMonthlyEodCSV` and `downloadDailyEodCSV`) and PDF ledger triggers.
+   - Built [`DownloadMonthlyEodButton.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/employee/components/reports/DownloadMonthlyEodButton.tsx) featuring a dropdown menu:
+     - **Download CSV Spreadsheet**: Compiles all shift dates, check-in/out timestamps, lunch break duration, net hours logged, completed deliverables, carried-forward tasks, and shift summary into a `.csv` download file.
+     - **Export PDF Audit Report**: Formats the selected month's shift deliverables into an audited printable ledger.
+   - Added to Employee EOD Reports, Admin Organization EOD Reports, and Admin Employee Profile EOD Tab.
+
+### 14.6 Admin-Exclusive Credential Provisioning & Password Management
+1. **Admin-Defined Login ID & Password on Account Creation**:
+   - In [`EmployeeFormDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/EmployeeFormDialog.tsx), the old "provision password" checkbox has been replaced with explicit credential inputs:
+     - **Employee Login ID**: Custom or auto-generated unique ID (e.g. `EMP-1050`), verified against collisions.
+     - **Set Password & Confirm Password**: Dedicated password input fields with show/hide toggle and match validation.
+   - Upon creation, a dedicated credentials card provides quick copying of Login ID, Login Email, and Password for employee onboarding.
+2. **Admin-Only Password Update Authority (Directly via Edit Profile)**:
+   - When administrators view an employee profile (`/admin/employees/:id`) and click **"Edit Profile"**, [`EmployeeFormDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/EmployeeFormDialog.tsx) provides **New Password** and **Confirm New Password** fields directly within the edit form. Leaving these fields blank preserves the existing password, while entering a new matching password updates the credentials immediately.
+   - Dedicated [`UpdatePasswordDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/UpdatePasswordDialog.tsx) is also available from the table action menu and profile header.
+3. **Strict Employee Restriction**:
+   - Employees have read-only credential settings and cannot modify their Login ID, email, or password. Password fields are permanently locked from employee self-service.
+
+### 14.7 Complete Employee-Admin Feature Parity & Visibility Audit
+1. **Task Delays & Milestone Governance ([`TasksPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/TasksPage.tsx))**:
+   - When employees record an overdue task delay explanation (`task.delayReason` / `task.comment`), it surfaces prominently in an amber alert chip directly in the admin tasks table and dedicated employee task modal.
+   - Task completion milestones (`0%`, `25%`, `50%`, `75%`, `100%`) are rendered with visual progress bars and milestone indicators alongside status badges.
+   - Self-assigned tasks (`Self-Assigned`) vs admin deliverables (`Admin Assigned`) are distinctively badged across all task lists.
+2. **Comprehensive Leave Details & Quota Tracking ([`AdminLeaveDetailsDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/AdminLeaveDetailsDialog.tsx), [`EmployeeLeaveSummary.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/EmployeeLeaveSummary.tsx))**:
+   - Built a dedicated details dialog enabling Admins to inspect untruncated leave reasons, applied dates, duration, and Super Admin review status.
+   - Displays real-time leave entitlement quota summary cards in employee profile (Casual: 8/12, Sick: 5/8, Annual: 14/18).
+   - Preserves Super Admin exclusivity for approval/rejection decisions while letting Admins attach operational advisory notes.
+3. **Workforce Attendance Logs Export ([`AttendancePage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/AttendancePage.tsx))**:
+   - Added **"Export CSV"** button in attendance toolbar, allowing administrators to download filtered punch logs, break durations, and net billable hours to a structured CSV spreadsheet.
+
+---
+
+## 15. WorkTrack Project Management System (Admin & Employee Integration)
+
+### 15.1 Architectural Overview & Core Concepts
+WorkTrack supports two distinct but compatible work management modes:
+1. **Normal Tasks (Independent)**:
+   - Standalone deliverables assigned to one or more employees with explicit deadlines.
+   - Operates without requiring any project linkage (`projectId: undefined`).
+2. **Project-Based Work Packages**:
+   - High-level corporate initiatives subdivided into modular **Project Parts / Work Packages**.
+   - Each project part carries an explicit **Contribution Weight (%)** defining its share of total project completion.
+   - Tasks and assignments belong to specific project parts without causing double counting.
+
+### 15.2 Weighted Contribution & Progress Calculation Engine
+- **Centralized Formula ([`projectProgress.ts`](file:///d:/00_VAMA_WORK/ems/client/src/utils/projectProgress.ts))**:
+  $$\text{Overall Project Progress} = \frac{\sum (\text{Part Weight} \times \text{Part Progress})}{100}$$
+- **100% Total Contribution Weight Validation**:
+  - The sum of all active project parts must equal exactly 100%: $\sum \text{Part.weight} = 100\%$.
+  - In [`ProjectPartDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/ProjectPartDialog.tsx), a live reactive balance meter informs administrators of the projected total weight and remaining balance.
+  - If a project's weights do not equal 100%, a prominent amber warning banner alerts administrators to rebalance work package allocations.
+- **Part Progress Derivation**:
+  - Derived from the average progress of underlying tasks assigned to that part ($\text{Part Progress} = \frac{\sum \text{Task.progress}}{N}$).
+  - If no individual tasks are linked, the part's configured milestone progress is utilized.
+- **Strict Prevention of Double Counting**:
+  - Project tasks are counted as standard deliverables in individual employee task queues. Their progress updates roll up into their assigned part, and the part's weighted contribution rolls into overall project progress.
+
+### 15.3 Admin Project Management Interfaces
+1. **Navigation Entry ([`AdminSidebar.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/AdminSidebar.tsx))**:
+   - Added **"Projects"** menu item under Administration with `<FolderKanban />` icon and a live badge indicating in-progress initiatives.
+2. **Projects Portfolio Page ([`ProjectsPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/ProjectsPage.tsx) — `/admin/projects`)**:
+   - KPI metrics: Total Portfolio, In Progress, Planning, Completed.
+   - Reactive search by project name, unique project code (e.g. `WT-ECS`), or client organization.
+   - Filters for status, business unit / department, and priority.
+   - Dual presentation: Interactive **Grid Card View** and structured **Table View**.
+   - Each project card features stacked contribution weight visualization ([`ProjectWeightBar.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/components/projects/ProjectWeightBar.tsx)), weighted progress bar ([`ProjectProgressBar.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/components/projects/ProjectProgressBar.tsx)), status badge ([`ProjectStatusBadge.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/components/projects/ProjectStatusBadge.tsx)), timeline dates, and reference links ([`ProjectLinksList.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/components/projects/ProjectLinksList.tsx)).
+3. **Dedicated Project Details Page ([`ProjectDetailsPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/ProjectDetailsPage.tsx) — `/admin/projects/:projectId`)**:
+   - **Header Banner**: Project code, status badge, priority pill, client name, description, overall progress, and target deadline.
+   - **6-Tab Suite**:
+     1. **Overview**: Work package delivery matrix, progress countdown, team allocations, and reference URLs.
+     2. **Project Parts**: Complete table of work packages with weights (%), assigned departments, assignees, deadlines, progress bars, calculated contribution (+X%), and status. Includes Add Part and Edit Part dialogs.
+     3. **Team & Assignments**: Department breakdown and accountability roster mapping each employee to their responsible work package.
+     4. **Tasks**: All deliverables linked to the project, grouped by work package, with assignees, deadlines, progress, and direct "Assign Project Task" dispatcher.
+     5. **Activity & History**: Chronological audit trail documenting project creation, work package additions, weight reallocations, and progress sync events.
+     6. **Links & References**: Dedicated directory of URLs (Live Site, Staging, GitHub Repo, Figma Design Spec, Documentation) with one-click copy and secure external launch.
+4. **Project Creation & Editing Dialogs**:
+   - [`ProjectFormDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/ProjectFormDialog.tsx): Name, code (with auto-generation helper), client, description, status, priority, start date, deadline, project owner, department multi-select, employee multi-select, and dynamic URL list.
+   - [`ProjectPartDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/ProjectPartDialog.tsx): Work package name, contribution weight (%), assigned department, employee assignees, start/deadline dates, and notes.
+
+### 15.4 Employee Dashboard Project Integration
+1. **Task Table Project Column ([`TaskTable.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/employee/components/TaskTable.tsx))**:
+   - Added a dedicated **Project** column between Task Details and Category across the Dashboard task card and [`MyTasksPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/employee/pages/MyTasksPage.tsx).
+   - Project-linked tasks display an indigo badge with the project name and work package identifier.
+   - Independent tasks display a neutral `Independent Task` label.
+2. **Task Details Modal Project Context ([`TaskTable.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/employee/components/TaskTable.tsx))**:
+   - When an employee opens an assigned task, a prominent Project Context banner displays:
+     - Associated Project Name and Work Package badge.
+     - Project scope description.
+     - Authorized project links (Live Site, Staging, Repository, Figma, Docs) opening safely in a new tab.
+3. **Optional Project Association on Self-Assigned Tasks ([`AddTaskPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/employee/pages/AddTaskPage.tsx))**:
+   - Employees logging self-directed work can optionally tag an active corporate project and work package or leave it as an independent deliverable.
+4. **Single Source of Truth & Real-Time Progress Flow**:
+   - State managed centrally via [`ProjectContext.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/context/ProjectContext.tsx) mounted at application root.
+   - When an employee updates their task progress (e.g. Alex Morgan advances `TSK-201` from 25% to 75% or completes it at 100%), `EmployeeContext` triggers `syncTaskProgressToProject`.
+   - The project part's progress updates immediately.
+   - The overall project progress updates immediately.
+   - Admin viewing `/admin/projects` or `/admin/projects/:projectId` sees the live progress update with zero manual refresh.
+
+### 15.5 Admin Dashboard Visual Telemetry
+- [x] **Initiative Status Mix Donut Chart Center Metric**:
+  - Embedded the aggregated total work count (`totalWorkCount = Completed + In Progress + Pending + Overdue`) with the label `"Total Work"` centered in the donut hole of the "Initiative Status Mix" card on [`AdminDashboardPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/AdminDashboardPage.tsx).
+  - Correctly reflects the full distribution sum (e.g. 8 Completed + 9 In Progress + 5 Pending + 3 Overdue = 25 Total Work).
+  - Designed with `pointer-events-none` so slice hover tooltips remain fully responsive across both light and dark modes.
+  - Aligned with the typography and layout pattern established in [`TaskOverviewChart.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/employee/components/charts/TaskOverviewChart.tsx).
+
+### 15.6 Universal Pagination System with Dynamic 10 / 20 / 30 Page Size Selectors
+- [x] **Universal Pagination Component ([`DataPagination.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/components/common/DataPagination.tsx))**:
+  - Built a shared, responsive pagination bar displaying item range telemetry (`Showing X to Y of Z [items]`).
+  - Added interactive page size selector pills (`[10 | 20 | 30]`) defaulting to 10 items per page with instant re-pagination.
+  - Smart windowing for numbered page buttons with ellipsis truncation, direct page switching, and Previous/Next buttons with disabled states.
+- [x] **Upgraded Views across Employee & Admin**:
+  - Applied dynamic 10 / 20 / 30 pagination across EOD reports, timesheets (weekly and monthly), task backlogs, work history, working days modal, attendance logs, projects, and workforce directory.
+
+### 15.7 Super Admin Role Integration & Exclusive Leave Decision Governance
+- [x] **DRY Architectural Parity**:
+  - Super Admin shares 100% feature parity with Admin: uses the exact same components and layouts ([`AdminLayout.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/layouts/AdminLayout.tsx), [`AdminDashboardPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/AdminDashboardPage.tsx), [`EmployeesPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/EmployeesPage.tsx), [`ProjectsPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/ProjectsPage.tsx), [`TasksPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/TasksPage.tsx), etc.). Zero redundant pages created.
+  - Wired in [`router.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/app/router.tsx) under `/super-admin` with `initialRole="super-admin"`.
+- [x] **Role State & Context Management ([`AdminContext.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/context/AdminContext.tsx))**:
+  - Added `currentRole: "admin" | "super-admin"`, `isSuperAdmin: boolean`, and `setRole: (role) => void`.
+  - Added authoritative decision actions: `approveLeave(leaveId, remarks)` and `rejectLeave(leaveId, remarks)`.
+  - Automatically updates `leaveRequests` state, marks status as `approved` / `rejected`, appends executive remarks to `adminComment`, and triggers toast notifications.
+- [x] **Dynamic Visual Identity & Navigation ([`AdminSidebar.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/AdminSidebar.tsx) & [`AdminHeader.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/AdminHeader.tsx))**:
+  - **Sidebar Badge**: Displays `SUPER ADMIN` with royal purple theme and `Executive Governance` subtitle when in Super Admin mode; displays `ADMIN` with blue theme when in Admin mode.
+  - **Leave Management Nav Item**: Displays `Approvals` badge for Super Admin; displays `View Only` badge for Admin.
+  - **Role Switcher**: Integrated interactive 3-way toggle (`Employee` | `Admin` | `Super Admin`) at the bottom of the sidebar with active role pill highlighting.
+  - **Header Badge**: Dynamically displays `Super Admin` (purple) or `System Admin` (blue).
+- [x] **Exclusive Leave Approval & Rejection Workflow ([`LeaveManagementPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/pages/LeaveManagementPage.tsx) & [`AdminLeaveDetailsDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/AdminLeaveDetailsDialog.tsx))**:
+  - **Super Admin Mode**:
+    - Replaces the read-only notice with an active **"Super Admin Executive Authority Active"** banner.
+    - Adds direct **Approve** (emerald `CheckCircle2`) and **Reject** (rose `XCircle`) action buttons on each pending leave row.
+    - Features a dedicated **Super Admin Decision Modal** with optional executive remarks / audit reason logging.
+    - [`AdminLeaveDetailsDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/AdminLeaveDetailsDialog.tsx) empowers Super Admin to approve or reject directly from the modal with remarks input.
+  - **Admin Mode**:
+    - Maintains the view-only governance policy with the advisory note sender dialog for Administrators.
+
+---
+
+## 16. Authentication System & Backend Architecture
+
+### 16.1 Unified Multi-Role Authentication
+- [x] **Universal Enterprise Login Page ([`LoginPage.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/auth/pages/LoginPage.tsx))**:
+  - Located at `/login`.
+  - Serves **Super Admin**, **Admin**, and **Employees** through a unified login interface.
+  - Supports credential authentication via Email address or Employee ID (`VAMA-XXX`) and secure password.
+  - Includes password visibility toggle, error handling, session loading animations, and corporate branding.
+  - Features 1-click **Quick Fill Test Credentials** for testing:
+    - **Super Admin**: `superadmin@vamastudio.com` / `SuperAdmin@2026!`
+    - **Admin**: `admin@vamastudio.com` / `Admin@2026!`
+    - **Employee**: `alex.m@vamastudio.com` / `Employee@2026!`
+- [x] **Strict Employee Provisioning Policy**:
+  - Employees cannot self-register.
+  - An authorized Administrator first provisions the employee record in `/admin/employees` using [`EmployeeFormDialog.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/EmployeeFormDialog.tsx), establishing their Login ID, email, and password.
+  - The provisioned credentials automatically sync to the backend API (`POST /api/employees`) and client authentication store.
+  - The employee then logs in with their Admin-assigned credentials.
+- [x] **Role-Based Access Control & Route Guarding ([`ProtectedRoute.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/auth/components/ProtectedRoute.tsx))**:
+  - Enforces route protection across all three workspaces:
+    - `/employee/*` — Restricted to authenticated users with `employee` role.
+    - `/admin/*` — Restricted to authenticated users with `admin` or `super-admin` role.
+    - `/super-admin/*` — Restricted strictly to users with `super-admin` role.
+  - Unauthenticated access redirects automatically to `/login` preserving target location state.
+  - Unauthorized role navigation redirects users to their appropriate workspace.
+- [x] **Universal Logout & Session Termination**:
+  - Connected across [`AdminHeader.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/AdminHeader.tsx), [`AdminSidebar.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/admin/components/AdminSidebar.tsx), [`DashboardHeader.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/employee/components/DashboardHeader.tsx), and [`AppSidebar.tsx`](file:///d:/00_VAMA_WORK/ems/client/src/employee/components/AppSidebar.tsx).
+  - Clears auth token, active user session, terminates working timer shift, and returns the user safely to `/login`.
+
+---
+
+### 16.2 Industrial Modular Node.js / Express Backend (`server/`)
+Constructed a production-ready, industrial standard backend in `server/` with clean separation of concerns:
+
+```
+server/
+├── package.json               # Dependencies: express, cors, multer, mysql2, dotenv, jsonwebtoken, bcryptjs, pdfkit
+├── tsconfig.json              # Strict TypeScript configuration
+├── .env.example / .env        # Database and JWT secrets configuration
+└── src/
+    ├── config/
+    │   ├── db.ts              # MySQL2 connection pool with keep-alive & error handling
+    │   ├── schema.sql         # Full relational MySQL schema with indexing & FK cascades
+    │   └── initDb.ts          # Automated table creation and seed data execution
+    ├── middleware/
+    │   ├── auth.ts            # JWT authentication middleware
+    │   ├── roleGuard.ts       # Role-based route authorization guards
+    │   ├── upload.ts          # Multer file upload handler
+    │   └── errorHandler.ts    # Centralized JSON error and 404 handlers
+    ├── controllers/
+    │   ├── authController.ts        # Login, getMe, logout
+    │   ├── employeeController.ts    # CRUD employees & password provisioning
+    │   ├── projectController.ts     # Projects & weighted progress calculation
+    │   ├── taskController.ts        # Tasks & delay justifications (NO allocatedTime)
+    │   ├── attendanceController.ts  # Punch-in, punch-out, shift duration logging
+    │   ├── leaveController.ts       # Leave applications & Super Admin decisions
+    │   ├── reportController.ts      # EOD report submission & PDFKit generation
+    │   └── departmentController.ts  # Department organization management
+    ├── services/
+    │   └── pdfService.ts      # PDFKit server-side generator for audited EOD reports
+    ├── routes/
+    │   ├── authRoutes.ts
+    │   ├── employeeRoutes.ts
+    │   ├── projectRoutes.ts
+    │   ├── taskRoutes.ts
+    │   ├── attendanceRoutes.ts
+    │   ├── leaveRoutes.ts
+    │   ├── reportRoutes.ts
+    │   ├── departmentRoutes.ts
+    │   └── index.ts           # Aggregated /api router
+    ├── types/
+    │   └── index.ts           # Shared TypeScript domain interfaces
+    ├── app.ts                 # Express application configuration with CORS
+    └── index.ts               # Server startup & database initialization
+```
+
+### 16.3 Relational MySQL Database Architecture
+The database schema (`schema.sql`) implements 12 relational tables:
+1. `users`: Authentication identities, password hashes, and roles (`employee`, `admin`, `super-admin`).
+2. `departments`: Organization units and color coding.
+3. `employees`: Workforce profiles linked to user accounts.
+4. `projects`: Project governance records, external links, and calculated weighted progress.
+5. `project_parts`: Work packages with contribution weights summing to 100%.
+6. `project_part_assignees`: Many-to-many relationship linking employees to project parts.
+7. `tasks`: Individual deliverables (**strictly NO allocatedTime or timeAllotted fields**).
+8. `attendance`: Daily shift records, check-in, check-out, and duration seconds.
+9. `attendance_breaks`: Categorized breaks (lunch, tea, other) with timestamps.
+10. `leave_requests`: Leave filings with Super Admin exclusive approval/rejection authority.
+11. `eod_reports`: Daily shift summaries, completed tasks, blockers, and next-day plans.
+12. `comments`: Contextual remarks across tasks, projects, and leave requests.
+
+### 16.4 Server-Side EOD PDF Generation (`pdfService.ts`)
+- Utilizes `pdfkit` to generate official corporate PDF shift reports.
+- Includes corporate header branding, report date, employee identity box, total shift hours, completed deliverables bulleted list, operational blockers, and next-shift execution agenda.
+- Accessible via `GET /api/reports/eod/pdf?date=...&employeeId=...` and wired to frontend export triggers in [`ReportsPage.tsx`](file:///d:/00_VAMA_WORK\ems\client\src\employee\pages\ReportsPage.tsx) and [`DownloadMonthlyEodButton.tsx`](file:///d:/00_VAMA_WORK\ems\client\src\employee\components\reports\DownloadMonthlyEodButton.tsx).
+
+### 16.5 Resilient Client-Server Integration ([`api.ts`](file:///d:/00_VAMA_WORK/ems/client/src/services/api.ts))
+- Built a typed API service in `client/src/services/api.ts` communicating with `http://localhost:5000/api`.
+- Attaches Bearer JWT authentication tokens to outgoing requests.
+- Designed with **graceful fallback**: if the user's MySQL service is not yet started locally, the frontend continues operating smoothly with client-side state and seed accounts, preventing white screens or connection failures.
+
+
+
+
+

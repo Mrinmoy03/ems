@@ -35,7 +35,7 @@ export const YearMonthPicker: React.FC<YearMonthPickerProps> = ({
   allowWeekly = false,
   isWeeklySelected = false,
   onSelectWeekly,
-  weeklyCount = 5,
+  weeklyCount = 6, // 6 Working Days: Monday to Saturday
   variant = "standard",
   className,
   showBadges = true,

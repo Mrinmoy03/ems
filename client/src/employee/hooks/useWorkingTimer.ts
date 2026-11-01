@@ -15,9 +15,9 @@ export function useWorkingTimer() {
   const [currentBreakStart, setCurrentBreakStart] = useState<string | null>(null)
   const [currentTime, setCurrentTime] = useState<number>(Date.now())
 
-  // Regular interval to update currentTime every 1 second when active
+  // Regular interval to update currentTime every 1 second when active or on break
   useEffect(() => {
-    if (sessionState !== "working") {
+    if (sessionState !== "working" && sessionState !== "on-break") {
       return
     }
 
@@ -127,6 +127,7 @@ export function useWorkingTimer() {
     loginTime,
     logoutTime,
     breaks,
+    currentBreakStart,
     elapsedSeconds,
     startWork,
     startLunchBreak,

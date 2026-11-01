@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const departmentController_1 = require("../controllers/departmentController");
+const auth_1 = require("../middleware/auth");
+const roleGuard_1 = require("../middleware/roleGuard");
+const router = (0, express_1.Router)();
+router.get("/", auth_1.authenticateToken, departmentController_1.getAllDepartments);
+router.post("/", auth_1.authenticateToken, roleGuard_1.isAdminOrSuperAdmin, departmentController_1.createDepartment);
+exports.default = router;

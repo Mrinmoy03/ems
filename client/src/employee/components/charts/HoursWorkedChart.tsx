@@ -23,6 +23,7 @@ export const HoursWorkedChart: React.FC = () => {
     { day: "Wed", hours: 8.5, target: 8.0 },
     { day: "Thu", hours: Math.max(0.1, todayHours), target: 8.0 }, // Today (live from working timer)
     { day: "Fri", hours: 0, target: 8.0 }, // Upcoming tomorrow
+    { day: "Sat", hours: 0, target: 8.0 }, // Saturday (6-day work week)
   ], [todayHours])
 
   const weeklyTotal = useMemo(() => {
@@ -39,7 +40,7 @@ export const HoursWorkedChart: React.FC = () => {
             Weekly Hours Worked
           </CardTitle>
         </div>
-        <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Target: 8.0h / day</span>
+        <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Target: 8.0h / day (Mon – Sat)</span>
       </CardHeader>
 
       <CardContent className="p-4">
@@ -105,7 +106,7 @@ export const HoursWorkedChart: React.FC = () => {
         <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
           <span>Weekly total: <strong className="text-slate-800 dark:text-slate-200 font-semibold">{weeklyTotal}h</strong></span>
           <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-            {Number(weeklyTotal) >= 32 ? `+${(Number(weeklyTotal) - 32).toFixed(1)}h vs target` : `${(32 - Number(weeklyTotal)).toFixed(1)}h to target`}
+            {Number(weeklyTotal) >= 32 ? `+${(Number(weeklyTotal) - 32).toFixed(1)}h pace` : `${(32 - Number(weeklyTotal)).toFixed(1)}h to target`} (48h Standard)
           </span>
         </div>
       </CardContent>
