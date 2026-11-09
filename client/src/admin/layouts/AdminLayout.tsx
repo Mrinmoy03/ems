@@ -10,6 +10,23 @@ interface AdminLayoutProps {
 
 export const AdminLayout: React.FC<AdminLayoutProps> = ({ initialRole }) => {
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("worktrack_sidebar_collapsed") === "true"
+    } catch {
+      return false
+    }
+  })
+
+  const toggleSidebarCollapse = () => {
+    setIsCollapsed(prev => {
+      const next = !prev
+      try {
+        localStorage.setItem("worktrack_sidebar_collapsed", String(next))
+      } catch {}
+      return next
+    })
+  }
 
   return (
     <AdminProvider initialRole={initialRole}>
@@ -18,12 +35,18 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ initialRole }) => {
         <AdminSidebar
           isMobileOpen={isMobileOpen}
           onMobileClose={() => setIsMobileOpen(false)}
+          isCollapsed={isCollapsed}
+          onToggleCollapse={toggleSidebarCollapse}
         />
 
         {/* Main Content Area */}
-        <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
+        <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden transition-all duration-300">
           {/* Header */}
-          <AdminHeader onMobileMenuToggle={() => setIsMobileOpen(!isMobileOpen)} />
+          <AdminHeader
+            onMobileMenuToggle={() => setIsMobileOpen(!isMobileOpen)}
+            isSidebarCollapsed={isCollapsed}
+            onToggleSidebar={toggleSidebarCollapse}
+          />
 
           {/* Page Body */}
           <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-slate-50/50 dark:bg-slate-950/50">

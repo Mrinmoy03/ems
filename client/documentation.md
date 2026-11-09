@@ -1126,17 +1126,20 @@ The database schema (`schema.sql`) implements 12 relational tables:
   - Replaced `row.deadline.slice(0, 10)` in both Admin and Employee context mappers with full ISO preservation (`row.deadline.includes("T") ? row.deadline : new Date(row.deadline).toISOString()`).
   - Completely eliminates the discrepancy where date-only strings defaulted to UTC midnight (`00:00 UTC`), which erroneously shifted to `5:30 AM` in Indian Standard Time (IST) on Admin and `12:00 AM` on the Employee portal.
 
-### 16.14 Official EOD Report PDF Generation & Multi-Tier Export Engine
-- **Industrial Backend PDF Engine (`pdfkit` on Node.js)**:
-  - Validated package `pdfkit` (v0.16.0) and `@types/pdfkit` in `server/package.json`.
-  - Upgraded [`pdfService.ts`](file:///d:/00_VAMA_WORK/ems/server/src/services/pdfService.ts) to dynamically render corporate, A4-sized PDF reports featuring dark branding headers, verified shift hours, key deliverables, dependencies/blockers, and compliance watermarks.
-  - Implemented `generateMonthlyAuditPdf` for high-level organizational and department-wide shift audit ledgers.
-- **Dynamic Controller Routing (`reportController.ts`)**:
-  - `downloadEodPdf` detects monthly vs single shift requests seamlessly (`/api/reports/eod/pdf`).
-  - Supports `reportId`, `employeeId`, and `date` parameters. If a shift record is requested for an active employee prior to database filing, it resolves the real employee (`Mrinmoy Bhattacharjee`, `EMP-5512`), completed tasks, and verified attendance telemetry dynamically.
-- **Frontend Blob Streaming Pipeline (`exportEodReport.ts`, `ReportsPage.tsx`, `EmployeeDetailsPage.tsx`)**:
-  - Upgraded `downloadDailyEodPDF` and `exportMonthlyEodPDF` to asynchronously stream the binary PDF stream as a Blob, bypassing popup blockers and triggering native browser downloads with clean filenames (`WorkTrack-EOD-EMP-5512-2026-11-09.pdf`).
-  - Connected the "Export" actions across Admin Reports (`/admin/reports`), Employee Details (`/admin/employees/:id`), and Employee Hub (`/employee/reports`) to the real PDF generation pipeline.
+### 16.15 Collapsible Sidebar Navigation System (Employee, Admin & Super Admin)
+- **Universal Desktop Collapsible Rail Navigation**:
+  - Implemented responsive desktop sidebar collapse/expand toggle functionality across all three application portals:
+    1. **Employee Portal** (`/employee`, `AppSidebar.tsx`, `EmployeeLayout.tsx`, `DashboardHeader.tsx`)
+    2. **Admin Portal** (`/admin`, `AdminSidebar.tsx`, `AdminLayout.tsx`, `AdminHeader.tsx`)
+    3. **Super Admin Portal** (`/super-admin`, using `AdminLayout.tsx` with `initialRole="super-admin"`)
+- **Interactive Controls & Layout Space Optimization**:
+  - **Sidebar Toggle Button**: Added a desktop collapse button (`PanelLeftClose`) in the sidebar brand headers and a quick-expand logo trigger when collapsed.
+  - **Top Navbar Header Toggle Button**: Added an ergonomic sidebar toggle button (`PanelLeftOpen` / `PanelLeftClose`) in both `DashboardHeader` and `AdminHeader` right next to the mobile menu trigger.
+  - **Fluid Layout Transition**: Main content layouts smoothly transition with `transition-all duration-300`, freeing up over 180px of horizontal desktop real estate (`w-60` / `w-64` collapsing to `w-[72px]`), allowing wide data tables, charts, and deliverables to display with maximum visibility.
+  - **Compact Rail UX**: In collapsed state, navigation items center icons with hover tooltips (`title`), notification dot indicators for pending items, and compact sign-out buttons.
+- **State Persistence**:
+  - Automatically persists the collapsed/expanded state in `localStorage` under `worktrack_sidebar_collapsed`, remembering the user's preference across page reloads and portal navigation.
+
 
 
 

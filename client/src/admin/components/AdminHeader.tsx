@@ -22,6 +22,8 @@ import {
   CheckCheck,
   Briefcase,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react"
 import { useAuth } from "../../auth/context/AuthContext"
 import { api } from "../../services/api"
@@ -36,9 +38,15 @@ interface AdminNotificationItem {
 
 interface AdminHeaderProps {
   onMobileMenuToggle: () => void
+  isSidebarCollapsed?: boolean
+  onToggleSidebar?: () => void
 }
 
-export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) => {
+export const AdminHeader: React.FC<AdminHeaderProps> = ({
+  onMobileMenuToggle,
+  isSidebarCollapsed = false,
+  onToggleSidebar,
+}) => {
   const navigate = useNavigate()
   const { isSuperAdmin } = useAdmin()
   const { user, logout } = useAuth()
@@ -84,8 +92,8 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
 
   return (
     <header className="h-16 border-b border-slate-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md sticky top-0 z-30 px-4 sm:px-6 flex items-center justify-between shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-colors">
-      {/* Left: Mobile hamburger & Admin Identity */}
-      <div className="flex items-center gap-3">
+      {/* Left: Mobile hamburger / Desktop Toggle & Admin Identity */}
+      <div className="flex items-center gap-2 sm:gap-3">
         <button
           onClick={onMobileMenuToggle}
           className="lg:hidden p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 focus:outline-none"
@@ -93,6 +101,23 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
         >
           <Menu className="h-5 w-5" />
         </button>
+
+        {/* Desktop Sidebar Collapse/Expand Toggle */}
+        {onToggleSidebar && (
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="hidden lg:flex p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 focus:outline-none transition-colors"
+            title={isSidebarCollapsed ? "Expand sidebar (Ctrl+B)" : "Collapse sidebar (Ctrl+B)"}
+            aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {isSidebarCollapsed ? (
+              <PanelLeftOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            ) : (
+              <PanelLeftClose className="h-5 w-5" />
+            )}
+          </button>
+        )}
 
         <div>
           <div className="flex items-center gap-2">
