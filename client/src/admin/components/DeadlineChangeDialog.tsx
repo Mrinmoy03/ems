@@ -32,13 +32,19 @@ export const DeadlineChangeDialog: React.FC<DeadlineChangeDialogProps> = ({
   const [reason, setReason] = useState("")
   const [error, setError] = useState<string | null>(null)
 
+  const formatToLocalDatetimeInput = (d: Date): string => {
+    if (isNaN(d.getTime())) return ""
+    const pad = (n: number) => String(n).padStart(2, "0")
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+
   useEffect(() => {
     if (task) {
       // Format deadline for datetime-local input
       const d = new Date(task.deadline)
       const formatted = isNaN(d.getTime())
-        ? new Date().toISOString().slice(0, 16)
-        : d.toISOString().slice(0, 16)
+        ? formatToLocalDatetimeInput(new Date())
+        : formatToLocalDatetimeInput(d)
       setNewDeadline(formatted)
       setReason("")
       setError(null)

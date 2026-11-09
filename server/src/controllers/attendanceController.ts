@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import pool from "../config/db";
+import { createNotificationInternal } from "./notificationController";
 
 const generateId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
 
@@ -44,19 +45,42 @@ export const getAttendance = async (req: Request, res: Response): Promise<void> 
 
 export const punchIn = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { employeeId } = req.body;
+    const rawEmpId = req.body?.employeeId || (req as any).user?.employeeId || (req as any).user?.id;
+    if (!rawEmpId) {
+      res.status(400).json({ success: false, message: "Employee identifier is required." });
+      return;
+    }
+
     const today = new Date().toISOString().split("T")[0];
     const now = new Date();
 
+    // 1. Resolve employee primary key from employees table
+    const [empRows]: any = await pool.query(
+      `SELECT id, employee_id, first_name, last_name FROM employees 
+       WHERE id = ? OR employee_id = ? OR user_id = ?`,
+      [rawEmpId, rawEmpId, rawEmpId]
+    );
+
+    if (!empRows || empRows.length === 0) {
+      res.status(404).json({ success: false, message: `Employee record not found for: ${rawEmpId}` });
+      return;
+    }
+
+    const resolvedEmp = empRows[0];
+    const empDbId = resolvedEmp.id;
+
+    // 2. Check existing attendance for today
     const [existing]: any = await pool.query(
-      "SELECT id, punch_in FROM attendance WHERE employee_id = ? AND date = ?",
-      [employeeId, today]
+      "SELECT id, punch_in, punch_out, status FROM attendance WHERE employee_id = ? AND (date = CURDATE() OR date = ?)",
+      [empDbId, today]
     );
 
     if (existing && existing.length > 0 && existing[0].punch_in) {
-      res.status(400).json({
-        success: false,
-        message: "Already punched in for today's shift.",
+      res.status(200).json({
+        success: true,
+        message: "Shift already clocked in.",
+        punchInTime: existing[0].punch_in,
+        attendanceId: existing[0].id,
       });
       return;
     }
@@ -65,30 +89,63 @@ export const punchIn = async (req: Request, res: Response): Promise<void> => {
 
     await pool.query(
       `INSERT INTO attendance (id, employee_id, date, punch_in, status)
-       VALUES (?, ?, ?, ?, 'present')
-       ON DUPLICATE KEY UPDATE punch_in = ?`,
-      [attendanceId, employeeId, today, now, now]
+       VALUES (?, ?, CURDATE(), ?, 'present')
+       ON DUPLICATE KEY UPDATE punch_in = COALESCE(punch_in, VALUES(punch_in)), status = 'present'`,
+      [attendanceId, empDbId, now]
     );
+
+    // Notify admins
+    try {
+      await createNotificationInternal({
+        roleTarget: "admin",
+        title: "Attendance Check-In",
+        message: `${resolvedEmp.first_name} ${resolvedEmp.last_name} (${resolvedEmp.employee_id}) clocked into shift at ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`,
+        type: "attendance",
+        entityId: attendanceId,
+      });
+    } catch (err: any) {
+      console.warn("Notice: could not dispatch attendance notification:", err.message);
+    }
 
     res.status(200).json({
       success: true,
       message: "Shift started. Punched in successfully at " + now.toLocaleTimeString(),
       punchInTime: now.toISOString(),
+      attendanceId,
     });
   } catch (error: any) {
+    console.error("Error in punchIn:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
 export const punchOut = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { employeeId } = req.body;
+    const rawEmpId = req.body?.employeeId || (req as any).user?.employeeId || (req as any).user?.id;
+    if (!rawEmpId) {
+      res.status(400).json({ success: false, message: "Employee identifier is required." });
+      return;
+    }
+
     const today = new Date().toISOString().split("T")[0];
     const now = new Date();
 
+    const [empRows]: any = await pool.query(
+      `SELECT id, employee_id FROM employees 
+       WHERE id = ? OR employee_id = ? OR user_id = ?`,
+      [rawEmpId, rawEmpId, rawEmpId]
+    );
+
+    if (!empRows || empRows.length === 0) {
+      res.status(404).json({ success: false, message: "Employee not found." });
+      return;
+    }
+
+    const empDbId = empRows[0].id;
+
     const [existing]: any = await pool.query(
-      "SELECT id, punch_in FROM attendance WHERE employee_id = ? AND date = ?",
-      [employeeId, today]
+      "SELECT id, punch_in FROM attendance WHERE employee_id = ? AND (date = CURDATE() OR date = ?)",
+      [empDbId, today]
     );
 
     if (!existing || existing.length === 0 || !existing[0].punch_in) {
@@ -116,6 +173,7 @@ export const punchOut = async (req: Request, res: Response): Promise<void> => {
       durationSeconds,
     });
   } catch (error: any) {
+    console.error("Error in punchOut:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

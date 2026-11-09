@@ -54,6 +54,11 @@ export const api = {
         method: "POST",
         body: JSON.stringify(employeeData),
       }),
+    update: (id: string, employeeData: any) =>
+      request<{ success: boolean; message: string; employee?: any }>(`/employees/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(employeeData),
+      }),
     updatePassword: (id: string, newPassword: string) =>
       request<{ success: boolean; message: string }>(`/employees/${id}/password`, {
         method: "PUT",
@@ -99,6 +104,18 @@ export const api = {
           body: JSON.stringify({ progress, delayReason }),
         }
       ),
+    updateDeadline: (taskId: string, deadline: string, reason: string) =>
+      request<{ success: boolean; message: string; deadline: string }>(
+        `/tasks/${taskId}/deadline`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ deadline, reason }),
+        }
+      ),
+    delete: (taskId: string) =>
+      request<{ success: boolean; message: string }>(`/tasks/${taskId}`, {
+        method: "DELETE",
+      }),
   },
 
   // Attendance & Time Logging
@@ -167,6 +184,44 @@ export const api = {
       request<{ success: boolean; message: string; departmentId: string }>("/departments", {
         method: "POST",
         body: JSON.stringify(deptData),
+      }),
+    update: (id: string, deptData: any) =>
+      request<{ success: boolean; message: string }>(`/departments/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(deptData),
+      }),
+    delete: (id: string) =>
+      request<{ success: boolean; message: string }>(`/departments/${id}`, {
+        method: "DELETE",
+      }),
+    archive: (id: string, isArchived: boolean = true) =>
+      request<{ success: boolean; message: string }>(`/departments/${id}/archive`, {
+        method: "PATCH",
+        body: JSON.stringify({ isArchived }),
+      }),
+    restore: (id: string) =>
+      request<{ success: boolean; message: string }>(`/departments/${id}/archive`, {
+        method: "PATCH",
+        body: JSON.stringify({ isArchived: false }),
+      }),
+  },
+
+  // Notifications (Live Backend Integration)
+  notifications: {
+    getAll: () =>
+      request<{ success: boolean; notifications: any[]; unreadCount: number }>("/notifications"),
+    markRead: (id: string) =>
+      request<{ success: boolean; message: string }>(`/notifications/${id}/read`, {
+        method: "PATCH",
+      }),
+    markAllRead: () =>
+      request<{ success: boolean; message: string }>("/notifications/read-all", {
+        method: "PATCH",
+      }),
+    create: (payload: { title: string; message: string; type?: string; roleTarget?: string; userId?: string }) =>
+      request<{ success: boolean; message: string; notificationId: string }>("/notifications", {
+        method: "POST",
+        body: JSON.stringify(payload),
       }),
   },
 };

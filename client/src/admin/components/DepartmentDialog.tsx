@@ -20,6 +20,7 @@ import {
 } from "../../components/ui/select"
 import { Department, CreateDepartmentInput } from "../types/admin"
 import { useAdmin } from "../context/AdminContext"
+import { api } from "../../services/api"
 import { Building2 } from "lucide-react"
 
 
@@ -83,6 +84,13 @@ export const DepartmentDialog: React.FC<DepartmentDialogProps> = ({
         setError(res.error || "Failed to update department")
         return
       }
+      // Persist update to backend DB
+      api.departments.update(departmentToEdit.id, {
+        name: name.trim(),
+        code: code.trim().toUpperCase(),
+        description: description.trim(),
+        headEmployeeId: headEmployeeId !== "none" ? headEmployeeId : null,
+      }).catch(err => console.warn("Department update API sync:", err.message))
     } else {
       const input: CreateDepartmentInput = {
         name: name.trim(),

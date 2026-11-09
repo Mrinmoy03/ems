@@ -55,38 +55,11 @@ export async function initializeDatabase() {
       );
     }
 
-    // Seed Sample Employee
-    const empPasswordHash = await bcrypt.hash("Employee@2026!", 10);
-    await connection.query(
-      `INSERT IGNORE INTO users (id, email, password_hash, role, status)
-       VALUES (?, ?, ?, 'employee', 'active')`,
-      ["user-emp-01", "alex.m@vamastudio.com", empPasswordHash]
-    );
-
-    await connection.query(
-      `INSERT IGNORE INTO employees (id, user_id, employee_id, first_name, last_name, email, phone, designation, department_id, location, join_date, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        "emp-001",
-        "user-emp-01",
-        "VAMA-001",
-        "Alex",
-        "Morgan",
-        "alex.m@vamastudio.com",
-        "+1 (555) 234-5678",
-        "Senior Frontend Engineer",
-        "dept-eng",
-        "San Francisco HQ",
-        "2024-01-15",
-        "active",
-      ]
-    );
-
+    // Clean state: Admins and Super Admins exist, but employees are created by Admin
     connection.release();
-    console.log("✅ WorkTrack database schema and seed credentials initialized successfully!");
+    console.log("✅ WorkTrack database schema and admin credentials initialized successfully!");
     console.log("👑 Super Admin: superadmin@vamastudio.com / SuperAdmin@2026!");
     console.log("🛡️ Admin: admin@vamastudio.com / Admin@2026!");
-    console.log("👤 Employee: alex.m@vamastudio.com / Employee@2026!");
   } catch (err: any) {
     console.warn("⚠️ Database initialization notice (DB may not be configured yet):", err.message);
   }

@@ -182,34 +182,56 @@ export function downloadDailyEodCSV(
 /**
  * Downloads official PDF format for a daily or monthly EOD report from backend PDF generator.
  */
-export function exportMonthlyEodPDF(monthName: string, year: number, count: number) {
+export async function exportMonthlyEodPDF(
+  monthName: string,
+  year: number,
+  count: number,
+  employeeId?: string
+) {
   try {
-    const url = api.reports.getPdfDownloadUrl(undefined, undefined, `${year}-${monthName}`)
+    toast.loading(`Generating audited Monthly EOD PDF for ${monthName} ${year}...`, { id: "pdf-month" })
+    const url = api.reports.getPdfDownloadUrl(undefined, employeeId, `${year}-${monthName}`)
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`)
+    const blob = await res.blob()
+    const blobUrl = URL.createObjectURL(blob)
     const link = document.createElement("a")
-    link.href = url
-    link.target = "_blank"
-    link.setAttribute("download", `WorkTrack_EOD_Monthly_${monthName}_${year}.pdf`)
+    link.href = blobUrl
+    link.download = `WorkTrack_EOD_Monthly_${monthName}_${year}.pdf`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    toast.success(`Generated official PDF for ${monthName} ${year} (${count} shifts).`)
-  } catch {
-    toast.success(`Exporting Audited Monthly EOD PDF for ${monthName} ${year} (${count} shifts). Printable ledger ready.`)
+    URL.revokeObjectURL(blobUrl)
+    toast.success(`Downloaded official Monthly Audit PDF (${count} shifts).`, { id: "pdf-month" })
+  } catch (err: any) {
+    console.error("PDF download failed:", err)
+    toast.error(`Failed to export monthly PDF: ${err.message}`, { id: "pdf-month" })
   }
 }
 
-export function downloadDailyEodPDF(report: DailyEodReport) {
+export async function downloadDailyEodPDF(
+  report: DailyEodReport,
+  customEmployeeId?: string
+) {
   try {
-    const url = api.reports.getPdfDownloadUrl(report.id, (report as any).employeeId, report.date)
+    const empId = customEmployeeId || (report as any).employeeId || (report as any).empCode
+    const safeDate = typeof report.date === "string" ? report.date : ""
+    toast.loading(`Generating official EOD PDF for shift ${safeDate}...`, { id: "pdf-day" })
+    const url = api.reports.getPdfDownloadUrl(report.id, empId, safeDate)
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`)
+    const blob = await res.blob()
+    const blobUrl = URL.createObjectURL(blob)
     const link = document.createElement("a")
-    link.href = url
-    link.target = "_blank"
-    link.setAttribute("download", `WorkTrack_EOD_${report.date}.pdf`)
+    link.href = blobUrl
+    link.download = `WorkTrack_EOD_${safeDate.replace(/[\s,]+/g, "_")}${empId ? `_${empId}` : ""}.pdf`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    toast.success(`Downloaded official PDF for shift ${report.date}`)
-  } catch {
-    toast.success(`Generated PDF document for shift ${report.date}`)
+    URL.revokeObjectURL(blobUrl)
+    toast.success(`Downloaded official PDF for shift ${safeDate}`, { id: "pdf-day" })
+  } catch (err: any) {
+    console.error("PDF download failed:", err)
+    toast.error(`Failed to export EOD PDF: ${err.message}`, { id: "pdf-day" })
   }
 }

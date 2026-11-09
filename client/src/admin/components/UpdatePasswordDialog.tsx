@@ -108,6 +108,7 @@ export const UpdatePasswordDialog: React.FC<UpdatePasswordDialogProps> = ({
     const res = updateEmployeePassword(employee.id, newPassword)
     if (res.success) {
       registerProvisionedEmployee({
+        phone: employee.phone || employee.id,
         email: employee.email,
         employeeId: employee.id,
         password: newPassword.trim(),
@@ -161,7 +162,9 @@ export const UpdatePasswordDialog: React.FC<UpdatePasswordDialogProps> = ({
                   {employee.id}
                 </Badge>
               </div>
-              <p className="text-[11px] text-slate-500">{employee.email}</p>
+              <p className="text-[11px] text-slate-500">
+                {employee.email} {employee.phone ? `• Login ID: ${employee.phone}` : ""}
+              </p>
             </div>
           </div>
 

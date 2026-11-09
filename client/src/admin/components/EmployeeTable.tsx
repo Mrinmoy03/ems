@@ -260,8 +260,13 @@ export const EmployeeTable: React.FC = () => {
                               ({emp.id})
                             </span>
                           </Link>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                            {emp.email}
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 flex-wrap">
+                            <span>{emp.email}</span>
+                            {emp.phone && (
+                              <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">
+                                • Login ID: {emp.phone}
+                              </span>
+                            )}
                           </p>
                         </div>
                       </div>
@@ -272,9 +277,36 @@ export const EmployeeTable: React.FC = () => {
                       <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
                         {emp.designation}
                       </p>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        {emp.department}
-                      </p>
+                      {(() => {
+                        const matchedDept = departments.find(d =>
+                          (emp.departmentId && d.id === emp.departmentId) ||
+                          (emp.department && (d.name.toLowerCase() === emp.department.toLowerCase() || d.id === emp.department))
+                        )
+                        const deptName = matchedDept ? matchedDept.name : (emp.department && emp.department !== "Unassigned" ? emp.department : "Unassigned")
+                        const deptId = matchedDept ? matchedDept.id : (emp.departmentId || null)
+                        const deptCode = matchedDept ? matchedDept.code : (emp.departmentCode || null)
+                        const isUnassigned = deptName === "Unassigned"
+
+                        return (
+                          <div className="space-y-0.5 mt-0.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`text-[11px] font-medium ${isUnassigned ? "text-slate-400 italic" : "text-slate-700 dark:text-slate-300"}`}>
+                                {deptName}
+                              </span>
+                              {deptCode && (
+                                <span className="font-mono text-[9px] px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 font-bold border border-indigo-200/60 dark:border-indigo-800/60">
+                                  {deptCode}
+                                </span>
+                              )}
+                            </div>
+                            {deptId && (
+                              <p className="font-mono text-[10px] text-slate-400 dark:text-slate-500">
+                                ID: {deptId}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </TableCell>
 
                     {/* Account Status */}

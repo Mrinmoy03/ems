@@ -84,7 +84,7 @@ export const LeaveRequestPage: React.FC = () => {
               <SelectValue placeholder="Select Year" />
             </SelectTrigger>
             <SelectContent>
-              {availableYears.map(yr => (
+              {availableYears.map((yr: string) => (
                 <SelectItem key={yr} value={yr} className="text-xs">
                   {yr === currentCalendarYear.toString()
                     ? `${yr} (Current Active Year)`

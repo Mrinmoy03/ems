@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import pool from "../config/db";
 import { AuthenticatedRequest } from "../middleware/auth";
+import { createNotificationInternal } from "./notificationController";
 
 const generateId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
 
@@ -22,8 +23,8 @@ export const getAllLeaves = async (req: Request, res: Response): Promise<void> =
     const params: any[] = [];
 
     if (employeeId) {
-      query += ` AND (l.employee_id = ? OR e.employee_id = ?)`;
-      params.push(employeeId, employeeId);
+      query += ` AND (l.employee_id = ? OR e.employee_id = ? OR e.user_id = ?)`;
+      params.push(employeeId, employeeId, employeeId);
     }
     if (status) {
       query += ` AND l.status = ?`;
@@ -55,13 +56,39 @@ export const applyLeave = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
+    // Resolve employee database primary key
+    const [empRows]: any = await pool.query(
+      `SELECT id, user_id, employee_id, first_name, last_name FROM employees 
+       WHERE id = ? OR employee_id = ? OR user_id = ?`,
+      [employeeId, employeeId, employeeId]
+    );
+
+    if (!empRows || empRows.length === 0) {
+      res.status(404).json({ success: false, message: `Employee record not found for: ${employeeId}` });
+      return;
+    }
+
+    const resolvedEmp = empRows[0];
     const leaveId = generateId("lv");
 
     await pool.query(
       `INSERT INTO leave_requests (id, employee_id, leave_type, start_date, end_date, reason, status)
        VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-      [leaveId, employeeId, leaveType, startDate, endDate, reason.trim()]
+      [leaveId, resolvedEmp.id, leaveType, startDate, endDate, reason.trim()]
     );
+
+    // Auto-notify Super Admin
+    try {
+      await createNotificationInternal({
+        roleTarget: "super-admin",
+        title: "Leave Request Submitted",
+        message: `${resolvedEmp.first_name} ${resolvedEmp.last_name} (${resolvedEmp.employee_id}) applied for ${leaveType} (${startDate} to ${endDate}). Awaiting review.`,
+        type: "leave",
+        entityId: leaveId,
+      });
+    } catch (err: any) {
+      console.warn("Notice: could not dispatch leave notification:", err.message);
+    }
 
     res.status(201).json({
       success: true,
@@ -99,6 +126,28 @@ export const decideLeaveRequest = async (req: AuthenticatedRequest, res: Respons
     if (result.affectedRows === 0) {
       res.status(404).json({ success: false, message: "Leave request record not found." });
       return;
+    }
+
+    // Auto-notify employee about Super Admin's decision
+    try {
+      const [empRows]: any = await pool.query(
+        `SELECT e.user_id, e.first_name, e.last_name, l.leave_type 
+         FROM leave_requests l 
+         JOIN employees e ON l.employee_id = e.id 
+         WHERE l.id = ?`,
+        [id]
+      );
+      const targetEmp = empRows?.[0];
+      await createNotificationInternal({
+        userId: targetEmp?.user_id || null,
+        roleTarget: "employee",
+        title: `Leave Request ${decision.toUpperCase()}`,
+        message: `Your leave request for ${targetEmp?.leave_type || "leave"} has been ${decision} by Super Admin.${remarks ? ` Remarks: ${remarks}` : ""}`,
+        type: "leave",
+        entityId: id,
+      });
+    } catch (err: any) {
+      console.warn("Notice: could not dispatch leave decision notification:", err.message);
     }
 
     res.status(200).json({

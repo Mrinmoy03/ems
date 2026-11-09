@@ -183,13 +183,15 @@ export const WorkingTimer: React.FC = () => {
             )}
           </div>
 
-          {/* Prototype disclaimer tag */}
+          {/* Shift status tag */}
           <div className="pt-1 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500">
             <span className="flex items-center gap-1">
-              <Info className="h-3 w-3" />
-              Demo State (Timestamp-backed)
+              <Info className="h-3 w-3 text-blue-500" />
+              Live Workday Telemetry
             </span>
-            <span className="text-slate-400 dark:text-slate-500">Resets on refresh</span>
+            <span className="text-slate-400 dark:text-slate-500 font-mono">
+              {sessionState === "working" ? "Active Shift" : sessionState === "on-break" ? "Lunch Break" : "Shift Complete"}
+            </span>
           </div>
         </CardContent>
       </Card>

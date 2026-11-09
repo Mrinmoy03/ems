@@ -8,6 +8,8 @@ export type TodayAttendanceStatus = "working" | "on-break" | "logged-out" | "pre
 export interface AdminEmployee extends EmployeeProfile {
   name: string
   avatar: string
+  departmentId?: string
+  departmentCode?: string
   accountStatus: EmployeeAccountStatus
   attendanceToday: TodayAttendanceStatus
   checkInToday?: string

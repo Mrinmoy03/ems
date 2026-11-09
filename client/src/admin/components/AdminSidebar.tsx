@@ -13,7 +13,6 @@ import {
   BarChart3,
   CalendarDays,
   Settings,
-  ArrowRightLeft,
   X,
   LogOut,
 } from "lucide-react"
@@ -26,7 +25,7 @@ interface AdminSidebarProps {
 
 export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isMobileOpen, onMobileClose }) => {
   const navigate = useNavigate()
-  const { kpis, isSuperAdmin, setRole } = useAdmin()
+  const { kpis, isSuperAdmin } = useAdmin()
   const { projects } = useProjects()
   const { logout } = useAuth()
 
@@ -175,71 +174,20 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isMobileOpen, onMobi
         })}
       </div>
 
-      {/* Role Switcher & Super Admin Link Footer */}
+      {/* Footer / Sign Out */}
       <div className="p-3 border-t border-slate-800/80 bg-slate-950/40 space-y-2">
-        <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs space-y-2">
-          <div className="flex items-center justify-between text-[11px] text-slate-400">
-            <span className="font-semibold text-slate-300 flex items-center gap-1.5">
-              <ArrowRightLeft className="h-3.5 w-3.5 text-blue-400" /> Role Switcher
-            </span>
-            <span className="text-[10px] bg-blue-950 text-blue-300 px-1.5 py-0.2 rounded border border-blue-800">
-              Dev Mode
-            </span>
-          </div>
-
-          <div className="grid grid-cols-3 gap-1 pt-1">
-            <NavLink
-              to="/employee"
-              onClick={onMobileClose}
-              className="py-1.5 px-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white text-[10px] font-medium text-center transition-colors border border-slate-700"
-            >
-              Employee
-            </NavLink>
-
-            <NavLink
-              to="/admin"
-              onClick={() => {
-                setRole("admin")
-                onMobileClose()
-              }}
-              className={`py-1.5 px-1.5 rounded-lg text-[10px] font-semibold text-center transition-colors border ${
-                !isSuperAdmin
-                  ? "bg-blue-600 border-blue-500 text-white shadow-xs font-bold"
-                  : "bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-700"
-              }`}
-            >
-              Admin
-            </NavLink>
-
-            <NavLink
-              to="/super-admin"
-              onClick={() => {
-                setRole("super-admin")
-                onMobileClose()
-              }}
-              className={`py-1.5 px-1.5 rounded-lg text-[10px] font-semibold text-center transition-colors border ${
-                isSuperAdmin
-                  ? "bg-purple-600 border-purple-500 text-white shadow-xs font-bold"
-                  : "bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-700"
-              }`}
-            >
-              Super Admin
-            </NavLink>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              logout()
-              onMobileClose()
-              navigate("/login", { replace: true })
-            }}
-            className="w-full mt-2 py-1.5 px-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-[11px] font-medium flex items-center justify-center gap-1.5 border border-red-500/20 transition-colors"
-          >
-            <LogOut className="w-3 h-3" />
-            <span>Sign Out</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            logout()
+            onMobileClose()
+            navigate("/login", { replace: true })
+          }}
+          className="w-full py-2 px-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-xs font-medium flex items-center justify-center gap-2 border border-red-500/20 transition-colors"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          <span>Sign Out</span>
+        </button>
 
         <div className="px-2 py-1 flex items-center justify-between text-[10px] text-slate-400">
           <span>WorkTrack v2.4 Admin</span>

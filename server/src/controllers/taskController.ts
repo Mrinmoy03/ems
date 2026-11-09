@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import pool from "../config/db";
+import { createNotificationInternal } from "./notificationController";
 
 const generateId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
 
@@ -21,8 +22,8 @@ export const getAllTasks = async (req: Request, res: Response): Promise<void> =>
     const params: any[] = [];
 
     if (employeeId) {
-      query += ` AND (t.assigned_to = ? OR e.employee_id = ?)`;
-      params.push(employeeId, employeeId);
+      query += ` AND (t.assigned_to = ? OR e.employee_id = ? OR e.user_id = ?)`;
+      params.push(employeeId, employeeId, employeeId);
     }
     if (status) {
       query += ` AND t.status = ?`;
@@ -68,29 +69,149 @@ export const createTask = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const taskId = generateId("tsk");
+    // 1. Resolve assignees (can be array or string)
+    const rawAssignees: string[] = Array.isArray(assignedTo) ? assignedTo : [assignedTo];
+    if (rawAssignees.length === 0) {
+      res.status(400).json({ success: false, message: "At least one assignee is required." });
+      return;
+    }
 
-    await pool.query(
-      `INSERT INTO tasks (id, title, description, assigned_to, department_id, project_id, project_part_id, priority, status, progress, deadline, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)`,
-      [
-        taskId,
-        title.trim(),
-        description || null,
-        assignedTo,
-        departmentId || null,
-        projectId || null,
-        projectPartId || null,
-        priority || "medium",
-        deadline,
-        createdBy || null,
-      ]
-    );
+    // 2. Resolve department if provided
+    let resolvedDeptId: string | null = null;
+    if (departmentId) {
+      const [deptRows]: any = await pool.query(
+        "SELECT id FROM departments WHERE id = ? OR code = ? OR name = ?",
+        [departmentId, departmentId, departmentId]
+      );
+      if (deptRows && deptRows.length > 0) {
+        resolvedDeptId = deptRows[0].id;
+      }
+    }
+
+    // 3. Resolve project if provided
+    let resolvedProjectId: string | null = null;
+    if (projectId) {
+      const [projRows]: any = await pool.query(
+        "SELECT id FROM projects WHERE id = ? OR project_code = ? OR name = ?",
+        [projectId, projectId, projectId]
+      );
+      if (projRows && projRows.length > 0) {
+        resolvedProjectId = projRows[0].id;
+      }
+    }
+
+    const createdTaskIds: string[] = [];
+
+    // 4. Create task entry for each assigned employee
+    for (const rawAssignee of rawAssignees) {
+      const [empRows]: any = await pool.query(
+        `SELECT id, user_id, employee_id, first_name, last_name, department_id FROM employees 
+         WHERE id = ? OR employee_id = ? OR user_id = ?`,
+        [rawAssignee, rawAssignee, rawAssignee]
+      );
+
+      if (!empRows || empRows.length === 0) {
+        console.warn(`Assignee ${rawAssignee} not found in employees table. Skipping.`);
+        continue;
+      }
+
+      const resolvedEmp = empRows[0];
+      const taskId = generateId("tsk");
+      const deptToUse = resolvedDeptId || resolvedEmp.department_id || null;
+      const deadlineDate = deadline ? new Date(deadline) : new Date();
+
+      await pool.query(
+        `INSERT INTO tasks (id, title, description, assigned_to, department_id, project_id, project_part_id, priority, status, progress, deadline, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)`,
+        [
+          taskId,
+          title.trim(),
+          description || null,
+          resolvedEmp.id,
+          deptToUse,
+          resolvedProjectId,
+          projectPartId || null,
+          priority || "medium",
+          deadlineDate,
+          createdBy || null,
+        ]
+      );
+
+      createdTaskIds.push(taskId);
+
+      // Notify assigned employee
+      try {
+        if (resolvedEmp.user_id) {
+          await createNotificationInternal({
+            userId: resolvedEmp.user_id,
+            roleTarget: "employee",
+            title: "New Task Assigned",
+            message: `You have been assigned: "${title.trim()}". Deadline: ${deadline || "N/A"}.`,
+            type: "task",
+            entityId: taskId,
+          });
+        }
+      } catch (err: any) {
+        console.warn("Notice: could not dispatch task assignment notification:", err.message);
+      }
+    }
+
+    if (createdTaskIds.length === 0) {
+      res.status(404).json({ success: false, message: "No valid assignees found in organization." });
+      return;
+    }
 
     res.status(201).json({
       success: true,
-      message: "Task created and assigned successfully.",
-      taskId,
+      message: `Task created and assigned to ${createdTaskIds.length} employee(s).`,
+      taskId: createdTaskIds[0],
+      taskIds: createdTaskIds,
+    });
+  } catch (error: any) {
+    console.error("Error in createTask:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateTaskDeadline = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { deadline, reason, changedBy } = req.body;
+
+    if (!deadline || !reason) {
+      res.status(400).json({
+        success: false,
+        message: "New deadline date and valid justification reason are required.",
+      });
+      return;
+    }
+
+    const deadlineDate = new Date(deadline);
+
+    await pool.query(
+      `UPDATE tasks
+       SET deadline = ?, delay_reason = ?
+       WHERE id = ?`,
+      [deadlineDate, reason.trim(), id]
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Task deadline updated successfully.",
+      deadline,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const deleteTask = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    await pool.query("DELETE FROM tasks WHERE id = ?", [id]);
+    res.status(200).json({
+      success: true,
+      message: "Task deleted successfully.",
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -144,6 +265,29 @@ export const updateTaskProgress = async (req: Request, res: Response): Promise<v
        WHERE id = ?`,
       [progress, newStatus, delayReason || null, id]
     );
+
+    // Notify admins if completed or overdue delay reported
+    try {
+      if (progress === 100) {
+        await createNotificationInternal({
+          roleTarget: "admin",
+          title: "Deliverable Completed",
+          message: `Task "${task.title}" has reached 100% completion.`,
+          type: "task",
+          entityId: id,
+        });
+      } else if (delayReason) {
+        await createNotificationInternal({
+          roleTarget: "admin",
+          title: "Deliverable Delay Notice",
+          message: `Task "${task.title}" reported delay: ${delayReason}`,
+          type: "task",
+          entityId: id,
+        });
+      }
+    } catch (err: any) {
+      console.warn("Notice: could not dispatch task progress notification:", err.message);
+    }
 
     res.status(200).json({
       success: true,

@@ -11,6 +11,8 @@ import { deriveTaskStatus, calculateTaskCounts } from "../utils/taskStatus"
 import { formatDurationToHuman } from "../utils/formatDuration"
 import { useWorkingTimer } from "../hooks/useWorkingTimer"
 import { useProjects } from "../../context/ProjectContext"
+import { useAuth } from "../../auth/context/AuthContext"
+import { api } from "../../services/api"
 import { toast } from "sonner"
 
 interface AddTaskInput {
@@ -62,11 +64,72 @@ const EmployeeContext = createContext<EmployeeContextValue | undefined>(undefine
 
 export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { syncTaskProgressToProject } = useProjects()
+  const { user: authUser } = useAuth()
   const [employee, setEmployee] = useState<EmployeeProfile>(initialMockEmployee)
   const [notifications, setNotifications] = useState<EmployeeNotification[]>(initialMockNotifications)
   const [tasks, setTasks] = useState<EmployeeTask[]>(initialMockTasks)
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(initialMockLeaveRequests)
   const [recentActivities, setRecentActivities] = useState<RecentActivityItem[]>(initialRecentActivities)
+
+  // Dynamically sync employee profile when an authenticated employee logs in
+  const fetchEmployeeProfile = useCallback(async () => {
+    const empId = authUser?.employeeId || authUser?.id
+    if (!empId) return
+    try {
+      const res = await api.employees.getById(empId)
+      if (res && res.success && res.employee) {
+        const emp = res.employee
+        const first = emp.first_name || ""
+        const last = emp.last_name || ""
+        const dept = emp.department_name || emp.department || authUser?.department || ""
+        const loc = emp.location || "Taratala"
+        const joined = emp.join_date
+          ? (typeof emp.join_date === "string" ? emp.join_date.slice(0, 10) : new Date(emp.join_date).toISOString().slice(0, 10))
+          : ""
+        setEmployee(prev => ({
+          ...prev,
+          id: emp.employee_id || emp.id || prev.id,
+          firstName: first || prev.firstName,
+          lastName: last || prev.lastName,
+          email: emp.email || prev.email,
+          phone: emp.phone || prev.phone,
+          department: dept || prev.department,
+          designation: emp.designation || prev.designation,
+          location: loc || prev.location,
+          joinDate: joined || prev.joinDate,
+          avatarUrl: emp.avatar_url || prev.avatarUrl,
+        }))
+      }
+    } catch (err: any) {
+      console.warn("Backend employee profile fetch notice:", err.message)
+    }
+  }, [authUser])
+
+  useEffect(() => {
+    if (authUser && authUser.role === "employee") {
+      const parts = (authUser.name || "").split(" ")
+      const first = parts[0] || "Employee"
+      const last = parts.slice(1).join(" ") || ""
+      setEmployee(prev => ({
+        ...prev,
+        id: authUser.employeeId || authUser.id,
+        firstName: first,
+        lastName: last,
+        email: authUser.email,
+        phone: authUser.phone || prev.phone,
+        department: authUser.department || prev.department,
+        designation: authUser.designation || prev.designation,
+        location: (authUser as any).location || prev.location || "Taratala",
+        joinDate: (authUser as any).joinDate
+          ? (typeof (authUser as any).joinDate === "string"
+              ? (authUser as any).joinDate.slice(0, 10)
+              : new Date((authUser as any).joinDate).toISOString().slice(0, 10))
+          : prev.joinDate,
+        avatarUrl: authUser.avatarUrl || prev.avatarUrl,
+      }))
+      fetchEmployeeProfile()
+    }
+  }, [authUser, fetchEmployeeProfile])
 
   // Notification Preferences with localStorage persistence
   const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>(() => {
@@ -90,7 +153,7 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     })
   }, [])
 
-  const timer = useWorkingTimer()
+  const timer = useWorkingTimer(authUser?.employeeId || authUser?.id)
 
   // Calculate live task counts
   const taskCounts = useMemo(() => {
@@ -106,15 +169,152 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     toast.success("Profile avatar updated successfully")
   }, [])
 
-  // When a notification is marked as read, remove it from active notification bar
+  // Fetch backend tasks for authenticated employee
+  const refreshTasks = useCallback(async () => {
+    const empId = authUser?.employeeId || authUser?.id
+    if (!empId) return
+    try {
+      const res = await api.tasks.getAll({ employeeId: empId })
+      if (res && res.success && Array.isArray(res.tasks)) {
+        const mapped: EmployeeTask[] = res.tasks.map((row: any) => {
+          const deadlineFormatted = row.deadline
+            ? (typeof row.deadline === "string"
+                ? (row.deadline.includes("T") ? row.deadline : new Date(row.deadline).toISOString())
+                : new Date(row.deadline).toISOString())
+            : ""
+          const progressVal = Number(row.progress) || 0
+          const isCompleted = progressVal === 100 || row.status === "completed"
+
+          return {
+            id: row.id,
+            title: row.title,
+            description: row.description || "",
+            category: row.department_name || "General",
+            deadline: deadlineFormatted,
+            status: isCompleted ? "completed" : row.status || "pending",
+            progress: progressVal as TaskProgress,
+            comment: row.delay_reason || "",
+            isSelfCreated: false,
+            createdAt: row.created_at || new Date().toISOString(),
+            updatedAt: row.updated_at || new Date().toISOString(),
+            completedAt: isCompleted ? row.updated_at || new Date().toISOString() : undefined,
+            projectId: row.project_id || undefined,
+            projectName: row.project_name || undefined,
+            projectPartId: row.project_part_id || undefined,
+          }
+        })
+        setTasks(mapped)
+      }
+    } catch (err: any) {
+      console.warn("Backend employee tasks sync notice:", err.message)
+    }
+  }, [authUser])
+
+  // Fetch backend leave requests for authenticated employee
+  const refreshLeaveRequests = useCallback(async () => {
+    const empId = authUser?.employeeId || authUser?.id
+    if (!empId) return
+    try {
+      const res = await api.leave.getAll({ employeeId: empId })
+      if (res && res.success && Array.isArray(res.leaves)) {
+        const mapped: LeaveRequest[] = res.leaves.map((l: any) => {
+          const start = new Date(l.start_date)
+          const end = new Date(l.end_date)
+          const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1)
+          return {
+            id: l.id,
+            leaveType: l.leave_type,
+            startDate: typeof l.start_date === "string" ? l.start_date.slice(0, 10) : new Date(l.start_date).toISOString().slice(0, 10),
+            endDate: typeof l.end_date === "string" ? l.end_date.slice(0, 10) : new Date(l.end_date).toISOString().slice(0, 10),
+            daysCount: days,
+            appliedAt: l.created_at || new Date().toISOString(),
+            reason: l.reason,
+            status: l.status,
+            adminComment: l.admin_remarks || l.super_admin_remarks || undefined,
+            createdAt: l.created_at || new Date().toISOString(),
+            updatedAt: l.updated_at || new Date().toISOString(),
+          }
+        })
+        setLeaveRequests(mapped)
+      }
+    } catch (err: any) {
+      console.warn("Backend employee leave sync notice:", err.message)
+    }
+  }, [authUser])
+
+  // Fetch backend notifications periodically
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const res = await api.notifications.getAll()
+      if (res.success && Array.isArray(res.notifications)) {
+        const formatted: EmployeeNotification[] = res.notifications.map((n: any) => ({
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          timestamp: n.created_at || new Date().toISOString(),
+          isRead: Boolean(n.is_read),
+          type: (n.type as any) || "system",
+        }))
+        setNotifications(formatted)
+      }
+    } catch {
+      // offline/fallback
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!authUser || authUser.role !== "employee") return
+    fetchEmployeeProfile()
+    fetchNotifications()
+    refreshTasks()
+    refreshLeaveRequests()
+
+    const timerId = setInterval(() => {
+      fetchNotifications()
+      refreshTasks()
+      refreshLeaveRequests()
+    }, 15000)
+
+    const onFocus = () => {
+      fetchEmployeeProfile()
+      refreshTasks()
+      refreshLeaveRequests()
+      fetchNotifications()
+    }
+    window.addEventListener("focus", onFocus)
+
+    let chTasks: BroadcastChannel | null = null
+    let chLeave: BroadcastChannel | null = null
+    try {
+      chTasks = new BroadcastChannel("worktrack_tasks")
+      chTasks.onmessage = () => {
+        refreshTasks()
+      }
+      chLeave = new BroadcastChannel("worktrack_leave")
+      chLeave.onmessage = () => {
+        refreshLeaveRequests()
+      }
+    } catch {}
+
+    return () => {
+      clearInterval(timerId)
+      window.removeEventListener("focus", onFocus)
+      if (chTasks) chTasks.close()
+      if (chLeave) chLeave.close()
+    }
+  }, [authUser, fetchEmployeeProfile, fetchNotifications, refreshTasks, refreshLeaveRequests])
+
+  // When a notification is marked as read, mark in backend and update state
   const markNotificationRead = useCallback((id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id))
+    api.notifications.markRead(id).catch(() => {})
     toast.success("Notification marked as read")
   }, [])
 
-  // When all notifications are marked as read, clear them all from notification bar
+  // When all notifications are marked as read, clear in backend and state
   const markAllNotificationsRead = useCallback(() => {
     setNotifications([])
+    api.notifications.markAllRead().catch(() => {})
     toast.success("All notifications marked as read")
   }, [])
 
@@ -128,6 +328,11 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         ...input,
       }
       setNotifications(prev => [newNotif, ...prev])
+      api.notifications.create({
+        title: input.title,
+        message: input.message,
+        type: input.type,
+      }).catch(() => {})
     },
     []
   )
@@ -138,6 +343,8 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const alertedDeadlineTaskIdsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
+    // Only check if employee is logged in
+    if (!authUser || authUser.role !== "employee") return
     if (!notificationPreferences.taskDeadlineApproaching) return
 
     const checkImpendingDeadlines = () => {
@@ -181,6 +388,7 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [timer.sessionState])
 
   useEffect(() => {
+    if (!authUser || authUser.role !== "employee") return
     if (!notificationPreferences.lunchBreakReminder) return
     if (timer.sessionState !== "on-break" || !timer.currentBreakStart) return
 
@@ -211,6 +419,7 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const eodDigestTriggeredRef = useRef(false)
 
   useEffect(() => {
+    if (!authUser || authUser.role !== "employee") return
     if (timer.sessionState === "working") {
       eodDigestTriggeredRef.current = false
     }
@@ -252,6 +461,27 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     setTasks(prev => [newTask, ...prev])
+
+    // Persist task to backend database
+    const empIdentifier = authUser?.employeeId || authUser?.id || employee.id
+    api.tasks.create({
+      title: input.title.trim(),
+      description: input.description?.trim(),
+      assignedTo: empIdentifier,
+      deadline: input.deadline,
+      priority: "medium",
+      projectId: input.projectId,
+      projectPartId: input.projectPartId,
+      createdBy: `${employee.firstName} ${employee.lastName}`,
+    }).then(() => {
+      try {
+        const ch = new BroadcastChannel("worktrack_tasks")
+        ch.postMessage({ type: "TASK_CREATED" })
+        ch.close()
+      } catch {}
+    }).catch(err => {
+      console.warn("Backend task creation notice:", err.message)
+    })
 
     // Record activity
     setRecentActivities(prev => [
@@ -310,6 +540,19 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return updatedTask
       })
     )
+
+    // Persist progress to MariaDB backend
+    api.tasks.updateProgress(id, progress, comment)
+      .then(() => {
+        try {
+          const ch = new BroadcastChannel("worktrack_tasks")
+          ch.postMessage({ type: "TASK_UPDATED", taskId: id })
+          ch.close()
+        } catch {}
+      })
+      .catch(err => {
+        console.warn("Backend task progress update notice:", err.message)
+      })
 
     setRecentActivities(prev => [
       {
@@ -372,6 +615,24 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     setLeaveRequests(prev => [newLeave, ...prev])
+
+    // Persist leave application to MariaDB backend
+    const empIdentifier = authUser?.employeeId || authUser?.id || employee.id
+    api.leave.apply({
+      employeeId: empIdentifier,
+      leaveType: input.leaveType,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      reason: input.reason.trim(),
+    }).then(() => {
+      try {
+        const ch = new BroadcastChannel("worktrack_leave")
+        ch.postMessage({ type: "LEAVE_APPLIED" })
+        ch.close()
+      } catch {}
+    }).catch(err => {
+      console.warn("Backend leave submission notice:", err.message)
+    })
 
     setRecentActivities(prev => [
       {

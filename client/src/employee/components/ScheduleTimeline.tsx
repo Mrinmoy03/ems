@@ -30,60 +30,68 @@ export const ScheduleTimeline: React.FC = () => {
             Today's Schedule
           </CardTitle>
         </div>
-        <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Demo Agenda</span>
+        <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Daily Agenda</span>
       </CardHeader>
 
       <CardContent className="p-4">
-        <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-100 dark:before:bg-slate-800">
-          {initialMockSchedule.map((item: ScheduleItem) => (
-            <div key={item.id} className="relative group text-xs">
-              {/* Dot / Icon */}
-              <div
-                className={`absolute -left-6 top-0.5 h-5 w-5 rounded-full flex items-center justify-center border transition-all ${
-                  item.completed
-                    ? "bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800"
-                    : item.isCurrent
-                    ? "bg-blue-50 dark:bg-blue-950/60 border-blue-400 ring-2 ring-blue-100 dark:ring-blue-900"
-                    : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
-                }`}
-              >
-                {getIcon(item.type, item.completed)}
-              </div>
-
-              {/* Content */}
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p
-                    className={`font-semibold ${
-                      item.completed
-                        ? "text-slate-400 dark:text-slate-500 line-through"
-                        : item.isCurrent
-                        ? "text-blue-700 dark:text-blue-400 font-bold"
-                        : "text-slate-800 dark:text-slate-200"
-                    }`}
-                  >
-                    {item.title}
-                  </p>
-                  <div className="flex items-center gap-2 mt-0.5 text-slate-400 dark:text-slate-500 text-[11px]">
-                    <span className="font-medium text-slate-500 dark:text-slate-400">{item.time}</span>
-                    {item.duration && <span>· {item.duration}</span>}
-                  </div>
+        {initialMockSchedule.length === 0 ? (
+          <div className="py-6 text-center text-slate-400 dark:text-slate-500">
+            <CalendarClock className="h-6 w-6 mx-auto mb-1.5 text-slate-300 dark:text-slate-600" />
+            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">No Scheduled Events Today</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Your calendar is open for dedicated task execution.</p>
+          </div>
+        ) : (
+          <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-100 dark:before:bg-slate-800">
+            {initialMockSchedule.map((item: ScheduleItem) => (
+              <div key={item.id} className="relative group text-xs">
+                {/* Dot / Icon */}
+                <div
+                  className={`absolute -left-6 top-0.5 h-5 w-5 rounded-full flex items-center justify-center border transition-all ${
+                    item.completed
+                      ? "bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800"
+                      : item.isCurrent
+                      ? "bg-blue-50 dark:bg-blue-950/60 border-blue-400 ring-2 ring-blue-100 dark:ring-blue-900"
+                      : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                  }`}
+                >
+                  {getIcon(item.type, item.completed)}
                 </div>
 
-                {item.isCurrent && (
-                  <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800 shrink-0">
-                    Now
-                  </span>
-                )}
-                {item.completed && (
-                  <span className="text-[10px] font-medium text-slate-400 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded shrink-0">
-                    Done
-                  </span>
-                )}
+                {/* Content */}
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p
+                      className={`font-semibold ${
+                        item.completed
+                          ? "text-slate-400 dark:text-slate-500 line-through"
+                          : item.isCurrent
+                          ? "text-blue-700 dark:text-blue-400 font-bold"
+                          : "text-slate-800 dark:text-slate-200"
+                      }`}
+                    >
+                      {item.title}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5 text-slate-400 dark:text-slate-500 text-[11px]">
+                      <span className="font-medium text-slate-500 dark:text-slate-400">{item.time}</span>
+                      {item.duration && <span>· {item.duration}</span>}
+                    </div>
+                  </div>
+
+                  {item.isCurrent && (
+                    <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800 shrink-0">
+                      Now
+                    </span>
+                  )}
+                  {item.completed && (
+                    <span className="text-[10px] font-medium text-slate-400 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded shrink-0">
+                      Done
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

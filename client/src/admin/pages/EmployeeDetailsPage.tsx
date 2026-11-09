@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useEffect, useCallback } from "react"
 import { useParams, useNavigate, Link } from "react-router-dom"
 import { useAdmin } from "../context/AdminContext"
+import { api } from "../../services/api"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/tabs"
 import { Button } from "../../components/ui/button"
 import { Badge } from "../../components/ui/badge"
@@ -18,7 +19,7 @@ import { getCurrentMonthKey, getMonthData } from "../../employee/data/mockReport
 import { YearMonthPicker } from "../../employee/components/YearMonthPicker"
 import { EodReportCard } from "../../employee/components/reports/EodReportCard"
 import { DownloadMonthlyEodButton } from "../../employee/components/reports/DownloadMonthlyEodButton"
-import { downloadDailyEodCSV } from "../../employee/utils/exportEodReport"
+import { downloadDailyEodPDF } from "../../employee/utils/exportEodReport"
 import { DataPagination } from "@/components/common/DataPagination"
 import { DailyEodReport } from "../../employee/types/report"
 import { toast } from "sonner"
@@ -77,18 +78,91 @@ export const EmployeeDetailsPage: React.FC = () => {
   const [expandedCardIds, setExpandedCardIds] = useState<Set<string>>(() => new Set())
   const [reportPage, setReportPage] = useState<number>(1)
   const [reportPageSize, setReportPageSize] = useState<number>(10)
+  const [backendReports, setBackendReports] = useState<any[]>([])
+
+  const fetchBackendReports = useCallback(async () => {
+    if (!employeeId) return
+    try {
+      const res = await api.reports.getEod({ employeeId, limit: "100" })
+      if (res && res.success && Array.isArray(res.reports)) {
+        const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+        const mapped = res.reports.map((row: any) => {
+          const d = new Date(row.date)
+          const dayOfWeek = daysOfWeek[d.getDay()] || "Monday"
+          const taskLines = (row.tasks_completed || "").split("\n").filter(Boolean)
+          const completedTasksList = taskLines.map((t: string, i: number) => ({
+            id: `tsk-${row.id}-${i + 1}`,
+            title: t,
+            category: row.department_name || "General",
+            completedAt: row.date,
+            isLate: false,
+          }))
+
+          return {
+            id: row.id,
+            date: typeof row.date === "string" ? row.date.slice(0, 10) : new Date(row.date).toISOString().slice(0, 10),
+            dayOfWeek,
+            checkIn: "09:00 AM",
+            checkOut: "06:00 PM",
+            breakDuration: "45m",
+            hoursLogged: `${row.hours_worked || 8}h 00m`,
+            hoursWorked: Number(row.hours_worked) || 8,
+            tasksTotal: completedTasksList.length,
+            tasksCompleted: completedTasksList.length,
+            tasksPending: 0,
+            completedTasks: completedTasksList,
+            inProgressTasks: row.next_day_plan ? [{
+              id: `plan-${row.id}`,
+              title: row.next_day_plan,
+              category: "Next Shift Plan",
+              progress: 0,
+              status: "in-progress" as const,
+              notes: row.challenges ? `Challenges noted: ${row.challenges}` : undefined,
+            }] : [],
+            summary: row.summary,
+            submittedAt: row.created_at ? new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "06:00 PM",
+          }
+        })
+        setBackendReports(mapped)
+      }
+    } catch (err: any) {
+      console.warn("Backend reports fetch notice:", err.message)
+    }
+  }, [employeeId])
+
+  useEffect(() => {
+    fetchBackendReports()
+    const timerId = setInterval(fetchBackendReports, 20000)
+    window.addEventListener("focus", fetchBackendReports)
+
+    let ch: BroadcastChannel | null = null
+    try {
+      ch = new BroadcastChannel("worktrack_eod")
+      ch.onmessage = () => {
+        fetchBackendReports()
+      }
+    } catch {}
+
+    return () => {
+      clearInterval(timerId)
+      window.removeEventListener("focus", fetchBackendReports)
+      if (ch) ch.close()
+    }
+  }, [fetchBackendReports])
 
   // Reset page when month or search changes
-  React.useEffect(() => {
+  useEffect(() => {
     setReportPage(1)
   }, [selectedMonthKey, reportSearchQuery])
 
   const currentMonthData = getMonthData(selectedMonthKey)
   const { monthName, year, eodReports } = currentMonthData
 
-  // Filter EOD reports for this employee
+  // Filter EOD reports for this employee (preferring real backend records)
+  const effectiveReports = backendReports.length > 0 ? backendReports : eodReports
+
   const filteredEmployeeReports = useMemo(() => {
-    return eodReports.filter(rep => {
+    return effectiveReports.filter((rep: any) => {
       if (reportSearchQuery.trim()) {
         const q = reportSearchQuery.toLowerCase()
         const matchDate =
@@ -96,7 +170,7 @@ export const EmployeeDetailsPage: React.FC = () => {
           (rep.dayOfWeek && rep.dayOfWeek.toLowerCase().includes(q))
         const matchSummary = rep.summary.toLowerCase().includes(q)
         const matchTasks = rep.completedTasks.some(
-          t =>
+          (t: any) =>
             t.title.toLowerCase().includes(q) ||
             t.id.toLowerCase().includes(q) ||
             (t.category && t.category.toLowerCase().includes(q))
@@ -105,7 +179,7 @@ export const EmployeeDetailsPage: React.FC = () => {
       }
       return true
     })
-  }, [eodReports, reportSearchQuery])
+  }, [effectiveReports, reportSearchQuery])
 
   // Pagination for employee reports
   const totalReportPages = Math.max(1, Math.ceil(filteredEmployeeReports.length / reportPageSize))
@@ -139,12 +213,12 @@ export const EmployeeDetailsPage: React.FC = () => {
     }
   }
 
-  const handleDownloadReport = (date: string) => {
-    const report = filteredEmployeeReports.find(r => r.date === date)
+  const handleDownloadReport = (date: string, reportItem?: any) => {
+    const report = reportItem || filteredEmployeeReports.find(r => r.date === date)
     if (report) {
-      downloadDailyEodCSV(report, employee.name)
+      downloadDailyEodPDF(report, employee.id)
     } else {
-      toast.success(`Exporting audited EOD report for ${date} (PDF/CSV)`)
+      toast.success(`Exporting audited EOD report for ${date} (PDF)`)
     }
   }
 

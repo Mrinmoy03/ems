@@ -59,123 +59,24 @@ export const TimesheetPage: React.FC = () => {
     setCurrentPage(1)
   }, [activePeriod, searchQuery])
 
-  // Current live weekly records synced with Oct 15 (Thursday)
-  const weeklyLog = useMemo(() => [
-    {
-      id: "shift-today",
-      date: "Oct 15 (Today)",
-      dayOfWeek: "Thursday",
-      inTime: format(new Date(loginTime), "hh:mm a"),
-      outTime: sessionState === "logged-out" ? (logoutTime ? format(new Date(logoutTime), "hh:mm a") : "05:00 PM") : "Active Session",
-      breakDuration: `${breaks.length * 45 || 0} mins`,
-      totalHours: formatDurationToHuman(elapsedSeconds),
-      status: sessionState === "logged-out" ? "Completed" : "In Progress",
-      tasksCompletedCount: liveCompletedTasks.length,
-      completedTasks: liveCompletedTasks,
-    },
-    {
-      id: "shift-oct-14",
-      date: "Oct 14 (Wed)",
-      dayOfWeek: "Wednesday",
-      inTime: "08:45 AM",
-      outTime: "06:00 PM",
-      breakDuration: "45 mins",
-      totalHours: "8h 30m",
-      status: "Completed",
-      tasksCompletedCount: 3,
-      completedTasks: [
-        { id: "TSK-198", title: "Sidebar Badge Counter Zero Suppression", category: "Frontend" },
-        {
-          id: "TSK-197",
-          title: "Working Timer Lunch Mode Resumption",
-          category: "Core Features",
-          isCompletedLate: true,
-          delayReason: "Waiting on cross-device battery saver timer edge case testing.",
-        },
-        { id: "TSK-196", title: "Today Task Card Height Lock", category: "Design System" },
-      ],
-    },
-    {
-      id: "shift-oct-13",
-      date: "Oct 13 (Tue)",
-      dayOfWeek: "Tuesday",
-      inTime: "08:45 AM",
-      outTime: "06:00 PM",
-      breakDuration: "45 mins",
-      totalHours: "8h 30m",
-      status: "Completed",
-      tasksCompletedCount: 4,
-      completedTasks: [
-        { id: "TSK-195", title: "Responsive Layout Fixes for Mobile Viewports", category: "Frontend" },
-        { id: "TSK-194", title: "Updated Table Styling & Border Densities", category: "Design System" },
-        { id: "TSK-193", title: "Timer Pause Handlers for Break Durations", category: "Core Features" },
-        { id: "TSK-192", title: "EOD Summary Generation Integration", category: "Operations" },
-      ],
-    },
-    {
-      id: "shift-oct-12",
-      date: "Oct 12 (Mon)",
-      dayOfWeek: "Monday",
-      inTime: "08:50 AM",
-      outTime: "05:48 PM",
-      breakDuration: "45 mins",
-      totalHours: "8h 13m",
-      status: "Completed",
-      tasksCompletedCount: 3,
-      completedTasks: [
-        { id: "TSK-191", title: "Audited Form Validation Rules with Zod", category: "Security" },
-        { id: "TSK-190", title: "Prepared Employee Data Models", category: "Architecture" },
-        { id: "TSK-189", title: "In-Memory Mock Stores Setup", category: "Architecture" },
-      ],
-    },
-    {
-      id: "shift-oct-10",
-      date: "Oct 10 (Sat)",
-      dayOfWeek: "Saturday",
-      inTime: "08:50 AM",
-      outTime: "05:40 PM",
-      breakDuration: "45 mins",
-      totalHours: "8h 05m",
-      status: "Completed",
-      tasksCompletedCount: 3,
-      completedTasks: [
-        { id: "TSK-189B", title: "Weekend Deployment Readiness & Bugfixes", category: "Core Features" },
-        { id: "TSK-189A", title: "Saturday Sprint Catch-Up & QA Passes", category: "Quality Assurance" },
-        { id: "TSK-188B", title: "Database Query Indexing & Profiling", category: "Backend" },
-      ],
-    },
-    {
-      id: "shift-oct-09",
-      date: "Oct 09 (Fri)",
-      dayOfWeek: "Friday",
-      inTime: "08:50 AM",
-      outTime: "05:45 PM",
-      breakDuration: "45 mins",
-      totalHours: "8h 10m",
-      status: "Completed",
-      tasksCompletedCount: 5,
-      completedTasks: [
-        { id: "TSK-188", title: "Sprint Wrap-Up & Deliverable QA", category: "General" },
-        { id: "TSK-187", title: "Weekly Code Reviews & Linting", category: "Quality Assurance" },
-        { id: "TSK-186", title: "Merged Analytics Chart Integrations", category: "Analytics" },
-      ],
-    },
-    {
-      id: "shift-oct-08",
-      date: "Oct 08 (Thu)",
-      dayOfWeek: "Thursday",
-      inTime: "08:45 AM",
-      outTime: "06:00 PM",
-      breakDuration: "45 mins",
-      totalHours: "8h 30m",
-      status: "Completed",
-      tasksCompletedCount: 2,
-      completedTasks: [
-        { id: "TSK-183", title: "Performance Profiling for Large Task Lists", category: "Architecture" },
-        { id: "TSK-182", title: "Refactor Timer State Machine", category: "Core Features" },
-      ],
-    },
-  ], [breaks.length, elapsedSeconds, loginTime, logoutTime, sessionState, liveCompletedTasks])
+  // Current live weekly records
+  const weeklyLog = useMemo(() => {
+    const today = new Date()
+    return [
+      {
+        id: "shift-today",
+        date: format(today, "MMM d (Today)"),
+        dayOfWeek: format(today, "EEEE"),
+        inTime: sessionState !== "not-started" ? format(new Date(loginTime), "hh:mm a") : "—",
+        outTime: sessionState === "logged-out" ? (logoutTime ? format(new Date(logoutTime), "hh:mm a") : "—") : "Active Session",
+        breakDuration: `${breaks.length * 45 || 0} mins`,
+        totalHours: formatDurationToHuman(elapsedSeconds),
+        status: sessionState === "logged-out" ? "Completed" : "In Progress",
+        tasksCompletedCount: liveCompletedTasks.length,
+        completedTasks: liveCompletedTasks,
+      },
+    ]
+  }, [breaks.length, elapsedSeconds, loginTime, logoutTime, sessionState, liveCompletedTasks])
 
   // Get active items based on period
   const activeItems = useMemo(() => {

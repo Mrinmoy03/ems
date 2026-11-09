@@ -7,4 +7,6 @@ const router = (0, express_1.Router)();
 router.get("/", auth_1.authenticateToken, taskController_1.getAllTasks);
 router.post("/", auth_1.authenticateToken, taskController_1.createTask);
 router.patch("/:id/progress", auth_1.authenticateToken, taskController_1.updateTaskProgress);
+router.patch("/:id/deadline", auth_1.authenticateToken, taskController_1.updateTaskDeadline);
+router.delete("/:id", auth_1.authenticateToken, taskController_1.deleteTask);
 exports.default = router;

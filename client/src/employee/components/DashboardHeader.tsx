@@ -24,7 +24,6 @@ import {
   Calendar,
   CheckCheck,
   Check,
-  Plus,
 } from "lucide-react"
 
 interface DashboardHeaderProps {
@@ -38,7 +37,6 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({ onMobileMenuTo
     unreadNotificationCount,
     markNotificationRead,
     markAllNotificationsRead,
-    addNotification,
     timer,
   } = useEmployee()
   const { user: authUser, logout: authLogout } = useAuth()
@@ -172,26 +170,6 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({ onMobileMenuTo
                 ))
               )}
             </div>
-
-            {/* Quick Simulate Trigger */}
-            {sortedNotifications.length === 0 && (
-              <div className="p-2 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex justify-center">
-                <button
-                  type="button"
-                  onClick={() =>
-                    addNotification({
-                      title: "Sprint Update",
-                      message: "Engineering leads posted updated sprint deliverables for this week.",
-                      type: "task",
-                    })
-                  }
-                  className="text-[10px] text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 font-medium flex items-center gap-1 py-0.5 px-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                >
-                  <Plus className="h-3 w-3" />
-                  Simulate New Notification
-                </button>
-              </div>
-            )}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -204,7 +182,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({ onMobileMenuTo
             >
               <Avatar className="h-9 w-9 ring-1 ring-slate-200 dark:ring-slate-700">
                 <AvatarImage src={employee.avatarUrl} alt={`${employee.firstName} ${employee.lastName}`} />
-                <AvatarFallback>{employee.firstName[0]}{employee.lastName[0]}</AvatarFallback>
+                <AvatarFallback>{(employee.firstName?.[0] || "E")}{(employee.lastName?.[0] || "")}</AvatarFallback>
               </Avatar>
             </button>
           </DropdownMenuTrigger>

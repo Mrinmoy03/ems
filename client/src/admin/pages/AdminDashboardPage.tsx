@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useState, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAdmin } from "../context/AdminContext"
 import { StatCard } from "../../employee/components/StatCard"
@@ -42,7 +42,7 @@ const STATUS_COLORS = {
 
 export const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate()
-  const { employees, tasks, kpis, deadlineHistory } = useAdmin()
+  const { employees, tasks, attendance, kpis, deadlineHistory } = useAdmin()
 
 
   const [isAddEmployeeOpen, setIsAddEmployeeOpen] = useState(false)
@@ -65,14 +65,51 @@ export const AdminDashboardPage: React.FC = () => {
   const totalWorkCount = taskStatusData.reduce((sum, item) => sum + item.value, 0)
 
   // Chart 3: Weekly Attendance Trend (Mon–Sat standard schedule)
-  const attendanceTrendData = [
-    { day: "Mon", present: 8, absent: 0 },
-    { day: "Tue", present: 8, absent: 0 },
-    { day: "Wed", present: 7, absent: 1 },
-    { day: "Thu", present: 8, absent: 0 },
-    { day: "Fri", present: 8, absent: 0 },
-    { day: "Sat", present: 7, absent: 1 },
-  ]
+  const attendanceTrendData = useMemo(() => {
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    if (employees.length === 0) {
+      return days.map(day => ({ day, present: 0, absent: 0 }))
+    }
+
+    const nowDay = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()]
+    return days.map(day => {
+      const dayMatches = attendance.filter((a: any) => {
+        const d = new Date(a.date)
+        const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()]
+        return dayName === day
+      })
+      const presentCount = dayMatches.filter(
+        (a: any) => a.status === "working" || a.status === "logged-out" || a.status === "on-break" || a.status === "present"
+      ).length
+      const absentCount = dayMatches.filter((a: any) => a.status === "absent" || a.status === "on-leave").length
+
+      if (dayMatches.length === 0 && day === nowDay) {
+        return {
+          day,
+          present: kpis.presentToday,
+          absent: kpis.absentToday,
+        }
+      }
+
+      return {
+        day,
+        present: presentCount,
+        absent: absentCount,
+      }
+    })
+  }, [employees.length, attendance, kpis.presentToday, kpis.absentToday])
+
+  const attendanceComplianceRate = useMemo(() => {
+    if (employees.length === 0) return "0% Compliance"
+    const totalPresent = attendanceTrendData.reduce((acc: number, d: { present: number; absent: number }) => acc + d.present, 0)
+    // Elapsed Mon-Sat workdays in current week (Mon=1, Tue=2, ..., Sat=6)
+    const currentDayIndex = new Date().getDay()
+    const elapsedWorkdays = currentDayIndex === 0 ? 6 : Math.min(6, currentDayIndex)
+    const totalSlots = employees.length * elapsedWorkdays
+    if (totalSlots === 0) return "0% Compliance"
+    const pct = Math.min(100, Math.round((totalPresent / totalSlots) * 100))
+    return `${pct}% Compliance`
+  }, [employees.length, attendanceTrendData])
 
   // Currently Active Employees (Working or On Break)
   const activeNowEmployees = employees.filter(
@@ -181,7 +218,7 @@ export const AdminDashboardPage: React.FC = () => {
               </p>
             </div>
             <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-              96.8% Average
+              {attendanceComplianceRate}
             </span>
           </div>
 
@@ -190,7 +227,13 @@ export const AdminDashboardPage: React.FC = () => {
               <BarChart data={attendanceTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(156, 163, 175, 0.2)" />
                 <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11 }} domain={[0, 10]} />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fontSize: 11 }}
+                  domain={[0, Math.max(5, employees.length)]}
+                  allowDecimals={false}
+                />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: "rgba(15, 23, 42, 0.9)",

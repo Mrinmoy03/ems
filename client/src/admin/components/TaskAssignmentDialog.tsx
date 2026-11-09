@@ -50,12 +50,18 @@ export const TaskAssignmentDialog: React.FC<TaskAssignmentDialogProps> = ({
   const [selectedProjectId, setSelectedProjectId] = useState<string>(defaultProjectId || "none")
   const [selectedPartId, setSelectedPartId] = useState<string>("none")
 
+  // Local datetime input formatter
+  const formatToLocalDatetimeInput = (d: Date): string => {
+    const pad = (n: number) => String(n).padStart(2, "0")
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+
   // Default deadline: 3 days from now at 18:00
   const getDefaultDeadline = () => {
     const d = new Date()
     d.setDate(d.getDate() + 3)
     d.setHours(18, 0, 0, 0)
-    return d.toISOString().slice(0, 16)
+    return formatToLocalDatetimeInput(d)
   }
 
   const [deadline, setDeadline] = useState(getDefaultDeadline)

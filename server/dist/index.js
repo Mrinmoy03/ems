@@ -27,7 +27,7 @@ async function bootstrap() {
             console.log(`ℹ️ [Mock Mode Ready]: WorkTrack frontend can also authenticate with preset seed accounts:`);
             console.log(`   👑 Super Admin: superadmin@vamastudio.com / SuperAdmin@2026!`);
             console.log(`   🛡️ Admin:       admin@vamastudio.com / Admin@2026!`);
-            console.log(`   👤 Employee:    alex.m@vamastudio.com / Employee@2026!`);
+            console.log(`   👤 Employee:    Employees will be created by Admin and login via their Phone Number.`);
         }
     });
 }

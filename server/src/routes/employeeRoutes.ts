@@ -3,6 +3,7 @@ import {
   getAllEmployees,
   getEmployeeById,
   createEmployee,
+  updateEmployee,
   updateEmployeePassword,
 } from "../controllers/employeeController";
 import { authenticateToken } from "../middleware/auth";
@@ -16,6 +17,7 @@ router.get("/:id", authenticateToken, getEmployeeById);
 
 // Employee Provisioning & Credential Management (Admin or Super Admin only)
 router.post("/", authenticateToken, isAdminOrSuperAdmin, createEmployee);
+router.put("/:id", authenticateToken, isAdminOrSuperAdmin, updateEmployee);
 router.put("/:id/password", authenticateToken, isAdminOrSuperAdmin, updateEmployeePassword);
 
 export default router;

@@ -10,8 +10,11 @@ export interface UserProfile {
   email: string;
   role: UserRole;
   employeeId?: string;
+  phone?: string;
   department?: string;
   designation?: string;
+  location?: string;
+  joinDate?: string;
   avatarUrl?: string;
 }
 
@@ -23,7 +26,7 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (emailOrId: string, password: string) => Promise<{ success: boolean; role?: UserRole; error?: string }>;
   logout: () => void;
-  registerProvisionedEmployee: (emp: { email: string; employeeId: string; password: string; name: string; department?: string; designation?: string }) => void;
+  registerProvisionedEmployee: (emp: { email: string; employeeId: string; password: string; name: string; phone?: string; department?: string; designation?: string }) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -49,15 +52,6 @@ export const PRESET_CREDENTIALS = {
     name: "Operations Admin",
     employeeId: "ADM-001",
     designation: "Head of Operations",
-  },
-  defaultEmployee: {
-    email: "alex.m@vamastudio.com",
-    password: "Employee@2026!",
-    role: "employee" as UserRole,
-    name: "Alex Morgan",
-    employeeId: "VAMA-001",
-    department: "Engineering",
-    designation: "Senior Frontend Engineer",
   },
 };
 
@@ -96,7 +90,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Method to record employee credentials provisioned by Admin
   const registerProvisionedEmployee = useCallback(
-    (emp: { email: string; employeeId: string; password: string; name: string; department?: string; designation?: string }) => {
+    (emp: { email: string; employeeId: string; password: string; name: string; phone?: string; department?: string; designation?: string }) => {
       try {
         const stored = localStorage.getItem(STORAGE_KEY_PROVISIONED);
         const list = stored ? JSON.parse(stored) : [];
@@ -126,13 +120,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             email: apiResponse.user.email,
             role: apiResponse.user.role as UserRole,
             employeeId: apiResponse.user.employeeId,
+            phone: apiResponse.user.phone,
             department: apiResponse.user.departmentName || apiResponse.user.department,
             designation: apiResponse.user.designation,
+            location: apiResponse.user.location,
+            joinDate: apiResponse.user.joinDate,
             avatarUrl: apiResponse.user.avatarUrl,
           };
 
           setUser(authenticatedUser);
           setToken(apiResponse.token);
+
+          // If employee role, immediately punch-in shift telemetry for live admin synchronization
+          if (authenticatedUser.role === "employee") {
+            const empIdForPunch = authenticatedUser.employeeId || authenticatedUser.id;
+            if (empIdForPunch) {
+              api.attendance.punchIn(empIdForPunch)
+                .then(() => {
+                  try {
+                    const ch = new BroadcastChannel("worktrack_attendance");
+                    ch.postMessage({ type: "PUNCH_IN", employeeId: empIdForPunch });
+                    ch.close();
+                  } catch {}
+                })
+                .catch(() => {});
+            }
+          }
+
           toast.success(`Welcome back, ${authenticatedUser.name}!`, {
             description: `Signed in to WorkTrack as ${authenticatedUser.role.toUpperCase()}.`,
           });
@@ -191,40 +205,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: true, role: "admin" };
       }
 
-      // 3. Default Preset Employee Check
-      if (
-        (cleanInput === PRESET_CREDENTIALS.defaultEmployee.email.toLowerCase() ||
-          cleanInput === PRESET_CREDENTIALS.defaultEmployee.employeeId.toLowerCase()) &&
-        cleanPass === PRESET_CREDENTIALS.defaultEmployee.password
-      ) {
-        const empProfile: UserProfile = {
-          id: PRESET_CREDENTIALS.defaultEmployee.employeeId,
-          name: PRESET_CREDENTIALS.defaultEmployee.name,
-          email: PRESET_CREDENTIALS.defaultEmployee.email,
-          role: "employee",
-          employeeId: PRESET_CREDENTIALS.defaultEmployee.employeeId,
-          department: PRESET_CREDENTIALS.defaultEmployee.department,
-          designation: PRESET_CREDENTIALS.defaultEmployee.designation,
-        };
-        setUser(empProfile);
-        setToken("mock_jwt_employee_session_token");
-        toast.success(`Welcome back, ${empProfile.name}!`, {
-          description: "Authenticated to Employee Operations Portal.",
-        });
-        setIsLoading(false);
-        return { success: true, role: "employee" };
-      }
-
-      // 4. Admin-Provisioned Employees in LocalStorage
+      // 3. Admin-Provisioned Employees in LocalStorage
       try {
         const stored = localStorage.getItem(STORAGE_KEY_PROVISIONED);
         if (stored) {
           const list = JSON.parse(stored);
-          const found = list.find(
-            (item: any) =>
-              (item.email.toLowerCase() === cleanInput || item.employeeId.toLowerCase() === cleanInput) &&
-              item.password === cleanPass
-          );
+          const cleanDigits = cleanInput.replace(/\D/g, "");
+          const found = list.find((item: any) => {
+            const itemPhoneDigits = (item.phone || "").replace(/\D/g, "");
+            const phoneMatch =
+              (item.phone && item.phone.trim().toLowerCase() === cleanInput) ||
+              (cleanDigits.length >= 7 && itemPhoneDigits.endsWith(cleanDigits.slice(-10))) ||
+              (itemPhoneDigits.length >= 7 && cleanDigits.endsWith(itemPhoneDigits.slice(-10)));
+
+            const emailMatch = item.email && item.email.toLowerCase() === cleanInput;
+            const idMatch = item.employeeId && item.employeeId.toLowerCase() === cleanInput;
+
+            return (phoneMatch || emailMatch || idMatch) && item.password === cleanPass;
+          });
 
           if (found) {
             const empProfile: UserProfile = {
@@ -233,6 +231,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               email: found.email,
               role: "employee",
               employeeId: found.employeeId,
+              phone: found.phone,
               department: found.department,
               designation: found.designation,
             };
@@ -250,7 +249,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       setIsLoading(false);
-      const errorMsg = "Invalid credentials. Please verify your email/ID and password, or contact your Administrator.";
+      const errorMsg = "Invalid credentials. For employees, please sign in with your Phone Number and the password set by your Administrator.";
       toast.error(errorMsg);
       return { success: false, error: errorMsg };
     },

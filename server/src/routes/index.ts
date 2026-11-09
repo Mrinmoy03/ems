@@ -7,6 +7,7 @@ import attendanceRoutes from "./attendanceRoutes";
 import leaveRoutes from "./leaveRoutes";
 import reportRoutes from "./reportRoutes";
 import departmentRoutes from "./departmentRoutes";
+import notificationRoutes from "./notificationRoutes";
 
 const router = Router();
 
@@ -18,6 +19,7 @@ router.use("/attendance", attendanceRoutes);
 router.use("/leave", leaveRoutes);
 router.use("/reports", reportRoutes);
 router.use("/departments", departmentRoutes);
+router.use("/notifications", notificationRoutes);
 
 export default router;
 

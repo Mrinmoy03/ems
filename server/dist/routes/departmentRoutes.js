@@ -7,4 +7,7 @@ const roleGuard_1 = require("../middleware/roleGuard");
 const router = (0, express_1.Router)();
 router.get("/", auth_1.authenticateToken, departmentController_1.getAllDepartments);
 router.post("/", auth_1.authenticateToken, roleGuard_1.isAdminOrSuperAdmin, departmentController_1.createDepartment);
+router.put("/:id", auth_1.authenticateToken, roleGuard_1.isAdminOrSuperAdmin, departmentController_1.updateDepartment);
+router.patch("/:id/archive", auth_1.authenticateToken, roleGuard_1.isAdminOrSuperAdmin, departmentController_1.toggleArchiveDepartment);
+router.delete("/:id", auth_1.authenticateToken, roleGuard_1.isAdminOrSuperAdmin, departmentController_1.deleteDepartment);
 exports.default = router;

@@ -170,7 +170,7 @@ export const ProfilePage: React.FC = () => {
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-                {employee.designation} · {employee.department}
+                {employee.designation}{employee.department ? ` · ${employee.department}` : ""}
               </p>
             </div>
 
@@ -180,7 +180,7 @@ export const ProfilePage: React.FC = () => {
                 <Mail className="h-4 w-4 text-slate-400 mt-0.5" />
                 <div>
                   <span className="text-[11px] text-slate-400 dark:text-slate-500 block">Email Address</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{employee.email}</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{employee.email || "N/A"}</span>
                 </div>
               </div>
 
@@ -188,7 +188,7 @@ export const ProfilePage: React.FC = () => {
                 <Building className="h-4 w-4 text-slate-400 mt-0.5" />
                 <div>
                   <span className="text-[11px] text-slate-400 dark:text-slate-500 block">Department</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{employee.department}</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{employee.department || "General"}</span>
                 </div>
               </div>
 
@@ -196,7 +196,7 @@ export const ProfilePage: React.FC = () => {
                 <Phone className="h-4 w-4 text-slate-400 mt-0.5" />
                 <div>
                   <span className="text-[11px] text-slate-400 dark:text-slate-500 block">Phone</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{employee.phone}</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{employee.phone || "Not provided"}</span>
                 </div>
               </div>
 
@@ -204,7 +204,7 @@ export const ProfilePage: React.FC = () => {
                 <MapPin className="h-4 w-4 text-slate-400 mt-0.5" />
                 <div>
                   <span className="text-[11px] text-slate-400 dark:text-slate-500 block">Office Location</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{employee.location}</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{employee.location || "Taratala"}</span>
                 </div>
               </div>
 
@@ -212,7 +212,7 @@ export const ProfilePage: React.FC = () => {
                 <Calendar className="h-4 w-4 text-slate-400 mt-0.5" />
                 <div>
                   <span className="text-[11px] text-slate-400 dark:text-slate-500 block">Date Joined</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{employee.joinDate}</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{employee.joinDate || "N/A"}</span>
                 </div>
               </div>
 
@@ -220,7 +220,7 @@ export const ProfilePage: React.FC = () => {
                 <User className="h-4 w-4 text-slate-400 mt-0.5" />
                 <div>
                   <span className="text-[11px] text-slate-400 dark:text-slate-500 block">Employee ID</span>
-                  <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">{employee.id}</span>
+                  <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">{employee.id || "N/A"}</span>
                 </div>
               </div>
             </div>

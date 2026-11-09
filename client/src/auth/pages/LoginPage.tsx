@@ -1,21 +1,17 @@
 import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useAuth, PRESET_CREDENTIALS } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { ThemeToggle } from "../../components/ThemeToggle";
 import {
   Lock,
-  Mail,
+  Phone,
   Shield,
   Eye,
   EyeOff,
   ArrowRight,
-  Sparkles,
-  Crown,
-  UserCheck,
-  Building2,
   Clock,
   AlertCircle,
   FileCheck2,
@@ -36,7 +32,7 @@ export const LoginPage: React.FC = () => {
     setErrorMessage(null);
 
     if (!emailOrId.trim() || !password.trim()) {
-      setErrorMessage("Please enter both your Email / Employee ID and password.");
+      setErrorMessage("Please enter both your Phone Number / Email and password.");
       return;
     }
 
@@ -60,12 +56,6 @@ export const LoginPage: React.FC = () => {
     } else {
       setErrorMessage(result.error || "Authentication failed. Please verify credentials.");
     }
-  };
-
-  const handleQuickFill = (email: string, pass: string) => {
-    setEmailOrId(email);
-    setPassword(pass);
-    setErrorMessage(null);
   };
 
   return (
@@ -122,25 +112,30 @@ export const LoginPage: React.FC = () => {
 
             {/* Login Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Email / ID Input */}
+              {/* Phone / Email Input */}
               <div className="space-y-1.5">
-                <Label htmlFor="login-identity" className="text-xs font-medium text-slate-300">
-                  Email Address or Employee ID
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="login-identity" className="text-xs font-semibold text-slate-200">
+                    Phone Number (Employee Login ID) / Admin Email
+                  </Label>
+                </div>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                    <Mail className="w-4 h-4" />
+                    <Phone className="w-4 h-4 text-blue-400" />
                   </div>
                   <Input
                     id="login-identity"
                     type="text"
-                    placeholder="e.g. admin@vamastudio.com or VAMA-001"
+                    placeholder="e.g. 9876543210 or admin@vamastudio.com"
                     value={emailOrId}
                     onChange={(e) => setEmailOrId(e.target.value)}
                     className="pl-10 bg-slate-900/90 border-slate-700/80 focus:border-blue-500 text-white placeholder:text-slate-500 rounded-xl text-sm"
                     required
                   />
                 </div>
+                <p className="text-[11px] text-slate-400">
+                  Employees log in using their registered <strong>Phone Number</strong>. Admins use corporate email.
+                </p>
               </div>
 
               {/* Password Input */}
@@ -196,91 +191,11 @@ export const LoginPage: React.FC = () => {
               </Button>
             </form>
 
-            {/* Quick Demo Access Pills */}
-            <div className="mt-6 pt-5 border-t border-slate-800">
-              <div className="flex items-center justify-between mb-2.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  Quick Fill Test Credentials
-                </span>
-                <span className="text-[10px] text-slate-500 font-mono">1-Click</span>
-              </div>
-
-              <div className="grid grid-cols-1 gap-2">
-                {/* Super Admin Pill */}
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleQuickFill(PRESET_CREDENTIALS.superAdmin.email, PRESET_CREDENTIALS.superAdmin.password)
-                  }
-                  className="flex items-center justify-between p-2 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-left transition text-xs group"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-md bg-purple-600/30 text-purple-300 flex items-center justify-center">
-                      <Crown className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-purple-200">Super Admin (Leaves Approval)</div>
-                      <div className="text-[11px] text-purple-300/70 font-mono">superadmin@vamastudio.com</div>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-medium text-purple-300 bg-purple-900/40 px-2 py-0.5 rounded">
-                    Fill
-                  </span>
-                </button>
-
-                {/* Admin Pill */}
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleQuickFill(PRESET_CREDENTIALS.admin.email, PRESET_CREDENTIALS.admin.password)
-                  }
-                  className="flex items-center justify-between p-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-left transition text-xs group"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-md bg-blue-600/30 text-blue-300 flex items-center justify-center">
-                      <Building2 className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-blue-200">System Admin (Operations)</div>
-                      <div className="text-[11px] text-blue-300/70 font-mono">admin@vamastudio.com</div>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-medium text-blue-300 bg-blue-900/40 px-2 py-0.5 rounded">
-                    Fill
-                  </span>
-                </button>
-
-                {/* Employee Pill */}
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleQuickFill(PRESET_CREDENTIALS.defaultEmployee.email, PRESET_CREDENTIALS.defaultEmployee.password)
-                  }
-                  className="flex items-center justify-between p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-left transition text-xs group"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-md bg-emerald-600/30 text-emerald-300 flex items-center justify-center">
-                      <UserCheck className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-emerald-200">Employee (Alex Morgan)</div>
-                      <div className="text-[11px] text-emerald-300/70 font-mono">alex.m@vamastudio.com</div>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-medium text-emerald-300 bg-emerald-900/40 px-2 py-0.5 rounded">
-                    Fill
-                  </span>
-                </button>
-              </div>
-            </div>
-
             {/* Provisioning Notice */}
             <div className="mt-5 p-3 rounded-xl bg-slate-900/70 border border-slate-800 text-[11px] text-slate-400 flex items-start gap-2 leading-relaxed">
               <FileCheck2 className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
               <span>
-                <strong>Employee Credential Policy:</strong> Admin will first create employee accounts in the Admin
-                Panel. Employees then log in using those credentials.
+                <strong>Employee Credential Policy:</strong> Admin creates employee profiles in the Admin Panel. The employee's <strong>Phone Number</strong> serves as their corporate Login ID, with password set by Admin.
               </span>
             </div>
           </div>

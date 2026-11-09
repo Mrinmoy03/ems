@@ -10,5 +10,6 @@ router.get("/", auth_1.authenticateToken, employeeController_1.getAllEmployees);
 router.get("/:id", auth_1.authenticateToken, employeeController_1.getEmployeeById);
 // Employee Provisioning & Credential Management (Admin or Super Admin only)
 router.post("/", auth_1.authenticateToken, roleGuard_1.isAdminOrSuperAdmin, employeeController_1.createEmployee);
+router.put("/:id", auth_1.authenticateToken, roleGuard_1.isAdminOrSuperAdmin, employeeController_1.updateEmployee);
 router.put("/:id/password", auth_1.authenticateToken, roleGuard_1.isAdminOrSuperAdmin, employeeController_1.updateEmployeePassword);
 exports.default = router;

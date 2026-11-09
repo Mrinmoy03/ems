@@ -1,7 +1,7 @@
-import React, { useState } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAdmin } from "../context/AdminContext"
-import { formatDashboardDate, getGreeting } from "../../employee/utils/date"
+import { formatDashboardDate, getGreeting, formatRelativeTime } from "../../employee/utils/date"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ThemeToggle"
@@ -19,14 +19,20 @@ import {
   Settings,
   Calendar,
   ShieldCheck,
-  ArrowRightLeft,
   CheckCheck,
-  Plus,
   Briefcase,
   LogOut,
 } from "lucide-react"
 import { useAuth } from "../../auth/context/AuthContext"
+import { api } from "../../services/api"
 
+interface AdminNotificationItem {
+  id: string
+  title: string
+  message: string
+  created_at: string
+  is_read: number | boolean
+}
 
 interface AdminHeaderProps {
   onMobileMenuToggle: () => void
@@ -37,38 +43,43 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
   const { isSuperAdmin } = useAdmin()
   const { user, logout } = useAuth()
   const [currentDate] = useState(() => new Date())
-  const [notifications, setNotifications] = useState([
-    {
-      id: "an-1",
-      title: "Leave Request Submitted",
-      message: "Alex Morgan applied for Annual Leave (Nov 10 – Nov 14). Awaiting Super Admin review.",
-      time: "20m ago",
-      isRead: false,
-    },
-    {
-      id: "an-2",
-      title: "Task Overdue Alert",
-      message: "Task TSK-202 assigned to Alex Morgan passed its deadline. Delay note recorded.",
-      time: "2h ago",
-      isRead: false,
-    },
-    {
-      id: "an-3",
-      title: "EOD Shift Report Submitted",
-      message: "Sophia Patel completed today's shift (8h 00m) and logged 1 completed task.",
-      time: "4h ago",
-      isRead: true,
-    },
-  ])
+  const [notifications, setNotifications] = useState<AdminNotificationItem[]>([])
 
-  const unreadCount = notifications.filter(n => !n.isRead).length
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const res = await api.notifications.getAll()
+      if (res.success && Array.isArray(res.notifications)) {
+        setNotifications(res.notifications)
+      }
+    } catch {
+      // Offline fallback
+    }
+  }, [])
 
-  const markAllRead = () => {
-    setNotifications([])
+  useEffect(() => {
+    fetchNotifications()
+    const interval = setInterval(fetchNotifications, 25000)
+    return () => clearInterval(interval)
+  }, [fetchNotifications])
+
+  const unreadCount = notifications.filter(n => !n.is_read).length
+
+  const markAllRead = async () => {
+    try {
+      await api.notifications.markAllRead()
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })))
+    } catch {
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })))
+    }
   }
 
-  const markRead = (id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id))
+  const markRead = async (id: string) => {
+    try {
+      await api.notifications.markRead(id)
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: 1 } : n))
+    } catch {
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: 1 } : n))
+    }
   }
 
   return (
@@ -173,9 +184,15 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
                   <div
                     key={n.id}
                     onClick={() => markRead(n.id)}
-                    className="p-3 text-xs cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-start gap-2.5 bg-blue-50/40 dark:bg-blue-950/30"
+                    className={`p-3 text-xs cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-start gap-2.5 ${
+                      !n.is_read ? "bg-blue-50/40 dark:bg-blue-950/30" : "opacity-75"
+                    }`}
                   >
-                    <div className="h-2 w-2 rounded-full mt-1.5 shrink-0 bg-blue-600 dark:bg-blue-400" />
+                    <div
+                      className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${
+                        !n.is_read ? "bg-blue-600 dark:bg-blue-400" : "bg-slate-300 dark:bg-slate-600"
+                      }`}
+                    />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-slate-800 dark:text-slate-200 text-xs">
                         {n.title}
@@ -184,35 +201,13 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
                         {n.message}
                       </p>
                       <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
-                        {n.time}
+                        {n.created_at ? formatRelativeTime(n.created_at) : "Recent"}
                       </p>
                     </div>
                   </div>
                 ))
               )}
             </div>
-
-            {notifications.length === 0 && (
-              <div className="p-2 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex justify-center">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setNotifications([
-                      {
-                        id: `an-${Date.now()}`,
-                        title: "Attendance Check-In Alert",
-                        message: "David Chen logged into Operations shift at 08:30 AM.",
-                        time: "Just now",
-                        isRead: false,
-                      },
-                    ])
-                  }
-                  className="text-[10px] text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 font-medium flex items-center gap-1 py-0.5 px-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                >
-                  <Plus className="h-3 w-3" /> Simulate Notification
-                </button>
-              </div>
-            )}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -251,18 +246,6 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
             <DropdownMenuItem onClick={() => navigate("/admin/departments")} className="cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs">
               <Briefcase className="h-3.5 w-3.5 mr-2 text-slate-500 dark:text-slate-400" />
               <span>Departments</span>
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator className="dark:bg-slate-800" />
-
-            <DropdownMenuItem onClick={() => navigate("/employee")} className="cursor-pointer text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 text-xs font-medium">
-              <ArrowRightLeft className="h-3.5 w-3.5 mr-2 text-blue-500" />
-              <span>Switch to Employee View</span>
-            </DropdownMenuItem>
-
-            <DropdownMenuItem onClick={() => navigate("/super-admin")} className="cursor-pointer text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/50 text-xs font-medium">
-              <ArrowRightLeft className="h-3.5 w-3.5 mr-2 text-purple-500" />
-              <span>Super Admin (Preview)</span>
             </DropdownMenuItem>
 
             <DropdownMenuSeparator className="dark:bg-slate-800" />

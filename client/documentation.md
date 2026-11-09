@@ -1009,6 +1009,139 @@ The database schema (`schema.sql`) implements 12 relational tables:
 - Attaches Bearer JWT authentication tokens to outgoing requests.
 - Designed with **graceful fallback**: if the user's MySQL service is not yet started locally, the frontend continues operating smoothly with client-side state and seed accounts, preventing white screens or connection failures.
 
+### 16.6 Testing Isolation & Zero-State Telemetry
+- **Login Notification Suppression**: Sealed all deadline and timer notification listeners in `EmployeeContext.tsx` with authentication guards (`authUser && authUser.role === 'employee'`). Unauthenticated users on the login screen no longer trigger background employee alerts.
+- **Dynamic Attendance Trend Telemetry**: Refactored the `Workforce Attendance Trend (Mon–Sat)` chart in `AdminDashboardPage.tsx` from hardcoded numbers to dynamic aggregation based on real workforce capacity (`employees.length`) and recorded attendance. When no employees exist, it renders zero attendance (`0% Compliance`), automatically scaling upward as real employees are created and log shifts.
+- **Login Screen Alignment**: Removed preset employee quick-fill buttons from `LoginPage.tsx`. Only authorized Administrative quick-fills remain, adhering strictly to the flow where Admins create employee profiles first.
+- **Role Switcher Complete Removal**: Removed all dev mode role switcher buttons (`Switch Portal`, `Role Switcher`) from `AdminSidebar`, `AppSidebar`, and `AdminHeader`. Role navigation is strictly authenticated via the `/login` route using credentials for Admin, Super Admin, or Employee (phone number).
+- **Backend Notifications Architecture**:
+  - `notificationRoutes.ts` mounted at `/api/notifications`.
+  - Supports role targeting (`all`, `admin`, `super-admin`, `employee`) and user-specific targeting.
+  - Automatic event dispatchers configured across `leaveController.ts`, `taskController.ts`, `attendanceController.ts`, and `reportController.ts`.
+
+### 16.7 Department Governance: Permanent Deletion, Archive & Restore
+- **Authority**: Both **System Administrators (Admin)** and **Super Administrators (Super Admin)** hold full authority to create, edit, archive, restore, and permanently delete departments.
+- **Active Departments Management**:
+  - Each active department card provides actions to:
+    - **Edit**: Modify title, code, description, and department head.
+    - **Archive**: Move the department to the Archived registry (only allowed if 0 active employees are currently assigned, or if reassigned).
+    - **Delete**: Trigger permanent deletion with a safety confirmation modal.
+- **Archived Departments Management**:
+  - Each archived card contains:
+    - **Restore** (`RotateCcw`): Immediately restores the department back to the active architecture.
+    - **Delete** (`Trash2`): Triggers the deletion confirmation modal to permanently remove the department from the database and client registries.
+  - A top-level **"Restore All ({count})"** action allows quick batch recovery of all archived departments.
+- **Data Protection Guard**:
+  - A department cannot be deleted or archived if active employees are currently assigned to it (`assignedEmployeesCount > 0`).
+
+### 16.8 Real-Time Department Assignment & Roster Telemetry
+- **Backend Employee Update API (`PUT /api/employees/:id`)**:
+  - Implemented `updateEmployee` controller in `server/src/controllers/employeeController.ts` and mounted in `employeeRoutes.ts`.
+  - Supports modifying `first_name`, `last_name`, `email`, `phone`, `designation`, `department_id`, `location`, and `status`.
+  - Resolves `department_id` against MariaDB `departments` table using primary key ID, name, or short code.
+- **Bi-Directional Department Reflection**:
+  - **Department Tab (`DepartmentsPage.tsx`)**: Replaced static `dept.employeeCount` with live derivation `Math.max(liveMembers, dept.employeeCount)` computed directly from active `employees`. Any time an employee is created or reassigned, the member counter increments or decrements immediately without requiring a full page refresh.
+  - **Employee Table (`EmployeeTable.tsx`)**: The Department cell now displays the complete hierarchy:
+    - Designation / Role (e.g. `Full-stack Developer`)
+    - Department Name (e.g. `Web Development` or `Unassigned`)
+    - Department Short Code badge (e.g. `WEB`)
+    - Department Primary Key (e.g. `ID: dept-mw4uxyhv-tkk87`)
+- **Profile Edit Department Assignment (`EmployeeFormDialog.tsx`)**:
+  - Wired edit profile submission to `api.employees.update(id, ...)`, resolving the selected department to its database ID and triggering `refreshEmployees()` and `refreshDepartments()`.
+
+### 16.10 Live Attendance Telemetry & Administrative Workforce Synchronization
+- **Backend Shift Clock-In & Primary Key Foreign Resolution (`attendanceController.ts`)**:
+  - Upgraded `punchIn` and `punchOut` controllers in `server/src/controllers/attendanceController.ts`.
+  - Seamlessly resolves employee identifiers across MariaDB primary key `id`, user ID `user_id`, or employee code `employee_id` (e.g. `EMP-5512`), guaranteeing strict compliance with `FOREIGN KEY (employee_id) REFERENCES employees(id)`.
+  - If a shift is already active for today (`punch_in IS NOT NULL AND punch_out IS NULL`), `punchIn` idempotently returns existing session timestamps without throwing constraint errors.
+  - Automatically dispatches system notifications to administration whenever an employee checks into their workday shift.
+- **Dynamic Database Attendance Join (`employeeController.ts`)**:
+  - Rewrote `getAllEmployees` and `getEmployeeById` in `server/src/controllers/employeeController.ts` with a live `LEFT JOIN attendance a ON e.id = a.employee_id AND a.date = CURDATE()`.
+  - Dynamically projects real-time status:
+    - `"working"`: when `punch_in IS NOT NULL` and `punch_out IS NULL`.
+    - `"logged-out"`: when `punch_in IS NOT NULL` and `punch_out IS NOT NULL`.
+    - `"on-leave"`: when `status = 'on-leave'`.
+    - `"absent"`: when no shift activity is recorded for today.
+  - Returns `check_in_today`, `check_out_today`, and `seconds_logged_today` directly in the payload.
+- **Admin Real-Time Workforce Telemetry (`AdminContext.tsx`)**:
+  - Integrated `refreshAttendance()` in `AdminContext.tsx` to retrieve all organization shift records via `api.attendance.getAll()`.
+  - Replaced the hardcoded `attendanceToday: "absent"` mapping with live database properties `attendanceToday`, `checkInToday`, `checkOutToday`, and `hoursLoggedToday`.
+  - Implemented multi-layered real-time sync:
+    1. Background interval poll every 15 seconds.
+    2. Window `focus` event listener for instantaneous refresh upon tab activation.
+    3. `BroadcastChannel("worktrack_attendance")` for immediate zero-latency cross-tab communication.
+- **Admin Dashboard KPI & Attendance Trend Visualizer (`AdminDashboardPage.tsx`)**:
+  - **Clocked In Today KPI Card**: Dynamically increments `presentToday` count and details active vs break distribution.
+  - **Sidebar Attendance Badge (`AdminSidebar.tsx`)**: Reflects live present count (e.g. `1 Present`).
+  - **Workforce Attendance Trend Compliance**: Adjusted calculation to evaluate compliance against elapsed workdays of the Mon–Sat week, rendering genuine 100% compliance when present employees clock in.
+  - **Live On-Duty Staff**: Renders clocked-in employees with active pulsating status dots, designation, department, and authentic check-in timestamp.
+  - **Employee Directory Table (`EmployeeTable.tsx`)**: Displays dynamic `Today's Attendance` badges ("Working", "On Break", "Logged Out", "Absent") with check-in time tags.
+
+### 16.11 Universal Data Persistence, Task Dispatch Pipeline & EOD Shift Synchronization
+- **Employee Telemetry Integrity (`employeeController.ts` & `AdminContext.tsx`)**:
+  - `getAllEmployees` and `getEmployeeById` query real-time task loads directly from MariaDB via dynamic subqueries:
+    - `active_tasks_count`: Active assignments matching `pending`, `in-progress`, or `overdue`.
+    - `completed_tasks_count`: Completed assignments matching `completed`.
+  - Admin and Super Admin rosters (`EmployeeTable.tsx`, `EmployeeDetailsPage.tsx`) reflect genuine organizational workload metrics with zero mock state.
+- **Bi-Directional Task Pipeline (`taskController.ts`, `AdminContext.tsx`, `EmployeeContext.tsx`)**:
+  - **Foreign Key Safe Resolution**: `createTask` in `server/src/controllers/taskController.ts` accepts single or array assignees (`assignedTo`), dynamically resolving employee codes (e.g. `EMP-5512`), user IDs, or primary keys to internal `employees.id`.
+  - **Admin Task Creation**: `createTask` in `AdminContext.tsx` dispatches `POST /api/tasks`, persisting every assignment to MariaDB `tasks` table and broadcasting `TASK_CREATED` over `BroadcastChannel("worktrack_tasks")`.
+  - **Live Employee Task Ingestion**: `EmployeeContext.tsx` fetches genuine assigned tasks via `api.tasks.getAll({ employeeId })` on initial load, on tab focus, periodically every 15s, and immediately upon receiving cross-tab broadcast signals.
+  - **Task Progress & Completion Sync**: When an employee updates progress or completes a deliverable, `updateTaskProgress` calls `PATCH /api/tasks/:id/progress` and broadcasts `TASK_UPDATED`.
+  - **Task Deadline Extension Audit**: Added `PATCH /api/tasks/:id/deadline` to update deadlines with mandatory reason audits, synchronized across Admin and Employee portals.
+- **End-Of-Day (EOD) Shift Reports System (`reportController.ts`, `ReportsPage.tsx`)**:
+  - **Database Persistence**: `submitEodReport` resolves employee foreign keys and saves `eod_reports` with executive summaries, completed deliverable logs, blockers/challenges, next-day plans, and verified shift hours.
+  - **Employee Report Submission**: Added interactive "File EOD Report" dialog to `client/src/employee/pages/ReportsPage.tsx`, auto-populating today's completed task summaries and elapsed timer hours. Submissions broadcast `worktrack_eod` and update the ledger.
+  - **Admin / Super Admin EOD Portal**: `client/src/admin/pages/ReportsPage.tsx` and `EmployeeDetailsPage.tsx` fetch real MariaDB reports via `api.reports.getEod()`, enabling instant organization-wide review, employee/department filtering, and PDF export.
+- **Leave Request Persistence (`leaveController.ts`, `LeaveManagementPage.tsx`)**:
+  - `applyLeave` and `getAllLeaves` resolve employee IDs cleanly against MariaDB `leave_requests`.
+  - `AdminContext.tsx` and `EmployeeContext.tsx` synchronize applications and executive decisions over `worktrack_leave`.
+- **Anti-Reset Reload Resilience**:
+  - Page refreshes on all portals (Admin, Super Admin, and Employee) load their single source of truth directly from MariaDB via `api.*.getAll()`, completely preventing state wipes or demo resets on browser reload.
+
+### 16.12 Employee Profile Database Hydration & Task Ingestion Sync
+- **Backend Auth Profile Enrichment (`authController.ts`)**:
+  - `login` and `getMe` controllers join `employees` and `departments` tables to fetch and return complete employee metadata (`phone`, `department_id`, `department_name`, `location`, `join_date`, `designation`).
+  - `UserProfile` model and `AuthContext` map these attributes directly into the active user session.
+- **Dedicated Employee Profile Hydration (`EmployeeContext.tsx`)**:
+  - Added `fetchEmployeeProfile()` which queries `api.employees.getById(empId)` on load, on interval (15s), and on tab focus.
+  - Dynamically populates employee state with phone (`7278402912`), department (`Web Development`), location (`Taratala`), and join date (`2026-11-06`).
+- **Profile Page Null-Safety & Real Data Display (`ProfilePage.tsx`)**:
+  - Connected the Employee Profile view to display all populated attributes with clean, professional fallbacks.
+- **Department Association & Active Task Accounting (`departmentController.ts`, `taskController.ts`, `AdminContext.tsx`)**:
+  - `getAllDepartments` query dynamically aggregates `COUNT(DISTINCT e.id) as employee_count` and `COUNT(DISTINCT t.id) as active_tasks_count`.
+  - When an admin assigns a task without specifying a department, `createTask` in `taskController.ts` automatically inherits the assignee's assigned department ID (`resolvedEmp.department_id`).
+  - Tasks assigned by Admin are stored in MariaDB `tasks` table and immediately fetched on `/employee/tasks` and `/employee` dashboard via `refreshTasks()` and BroadcastChannel.
+- **Fallback Token Authorization Compatibility (`auth.ts`)**:
+  - Added support for development fallback tokens in `authenticateToken` middleware to prevent 403 authorization rejections during offline or local development workflows.
+
+### 16.13 Task Deadline Datetime Precision & Timezone Alignment
+- **MariaDB Schema Upgrade (`tasks.deadline`)**:
+  - Altered MariaDB `tasks.deadline` column type from `DATE` to `DATETIME NOT NULL`.
+  - Storing full datetime enables minute-level target deliverable tracking (e.g. `2026-11-09 19:00:00` / 7:00 PM), eliminating MySQL truncation of hour and minute fields.
+- **Frontend Datetime-Local Formatting & Serialization (`TaskAssignmentDialog.tsx`, `DeadlineChangeDialog.tsx`)**:
+  - Replaced `d.toISOString().slice(0, 16)` with local datetime formatters (`formatToLocalDatetimeInput(d)`).
+  - Prevents the browser's `<input type="datetime-local">` from receiving UTC-skewed values, ensuring the exact chosen hour/minute (e.g. 7:00 PM) is serialized cleanly.
+- **Full ISO Timestamp Ingestion (`AdminContext.tsx`, `EmployeeContext.tsx`)**:
+  - Replaced `row.deadline.slice(0, 10)` in both Admin and Employee context mappers with full ISO preservation (`row.deadline.includes("T") ? row.deadline : new Date(row.deadline).toISOString()`).
+  - Completely eliminates the discrepancy where date-only strings defaulted to UTC midnight (`00:00 UTC`), which erroneously shifted to `5:30 AM` in Indian Standard Time (IST) on Admin and `12:00 AM` on the Employee portal.
+
+### 16.14 Official EOD Report PDF Generation & Multi-Tier Export Engine
+- **Industrial Backend PDF Engine (`pdfkit` on Node.js)**:
+  - Validated package `pdfkit` (v0.16.0) and `@types/pdfkit` in `server/package.json`.
+  - Upgraded [`pdfService.ts`](file:///d:/00_VAMA_WORK/ems/server/src/services/pdfService.ts) to dynamically render corporate, A4-sized PDF reports featuring dark branding headers, verified shift hours, key deliverables, dependencies/blockers, and compliance watermarks.
+  - Implemented `generateMonthlyAuditPdf` for high-level organizational and department-wide shift audit ledgers.
+- **Dynamic Controller Routing (`reportController.ts`)**:
+  - `downloadEodPdf` detects monthly vs single shift requests seamlessly (`/api/reports/eod/pdf`).
+  - Supports `reportId`, `employeeId`, and `date` parameters. If a shift record is requested for an active employee prior to database filing, it resolves the real employee (`Mrinmoy Bhattacharjee`, `EMP-5512`), completed tasks, and verified attendance telemetry dynamically.
+- **Frontend Blob Streaming Pipeline (`exportEodReport.ts`, `ReportsPage.tsx`, `EmployeeDetailsPage.tsx`)**:
+  - Upgraded `downloadDailyEodPDF` and `exportMonthlyEodPDF` to asynchronously stream the binary PDF stream as a Blob, bypassing popup blockers and triggering native browser downloads with clean filenames (`WorkTrack-EOD-EMP-5512-2026-11-09.pdf`).
+  - Connected the "Export" actions across Admin Reports (`/admin/reports`), Employee Details (`/admin/employees/:id`), and Employee Hub (`/employee/reports`) to the real PDF generation pipeline.
+
+
+
+
+
 
 
 

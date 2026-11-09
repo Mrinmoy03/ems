@@ -34,6 +34,7 @@ import {
   ShieldCheck,
   Copy,
   Check,
+  Phone,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -50,7 +51,7 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
   employeeToEdit,
   onSuccess,
 }) => {
-  const { employees, departments, createEmployee, updateEmployee, updateEmployeePassword } = useAdmin()
+  const { employees, departments, createEmployee, updateEmployee, updateEmployeePassword, refreshEmployees, refreshDepartments } = useAdmin()
   const { registerProvisionedEmployee } = useAuth()
 
   const isEdit = Boolean(employeeToEdit)
@@ -73,15 +74,17 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
   // Provisioning feedback state
   const [provisionedNotice, setProvisionedNotice] = useState<{
     email: string
+    phone: string
     tempPassword?: string
     id: string
+    name?: string
   } | null>(null)
 
   const [copiedCredentials, setCopiedCredentials] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  // Helper to generate an available unique Login ID
-  const generateNewLoginId = () => {
+  // Helper to generate an available unique Employee ID
+  const generateNewEmployeeId = () => {
     let candidate = `EMP-${Math.floor(1000 + Math.random() * 9000)}`
     while (employees.some(e => e.id === candidate)) {
       candidate = `EMP-${Math.floor(1000 + Math.random() * 9000)}`
@@ -118,7 +121,7 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
       setAccountStatus(employeeToEdit.accountStatus || "active")
       setProvisionedNotice(null)
     } else {
-      setEmployeeId(generateNewLoginId())
+      setEmployeeId(generateNewEmployeeId())
       setFirstName("")
       setLastName("")
       setEmail("")
@@ -127,7 +130,7 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
       setShowPassword(false)
       setShowConfirmPassword(false)
       setDesignation("")
-      setDepartment(departments[0]?.name || "Product Engineering")
+      setDepartment(departments[0]?.name || "")
       setPhone("")
       setLocation("San Francisco, CA (HQ)")
       setAccountStatus("active")
@@ -140,15 +143,29 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
   const validate = () => {
     const errs: Record<string, string> = {}
 
+    // Phone is mandatory as it serves as the employee's login ID
+    if (!phone.trim()) {
+      errs.phone = "Phone number is required (serves as Employee Login ID)"
+    } else if (phone.replace(/\D/g, "").length < 8) {
+      errs.phone = "Please enter a valid phone number (min 8-10 digits)"
+    } else if (
+      !isEdit &&
+      employees.some(
+        e => e.phone && e.phone.replace(/\D/g, "") === phone.replace(/\D/g, "")
+      )
+    ) {
+      errs.phone = `Phone number "${phone.trim()}" is already assigned to another employee`
+    }
+
     if (!isEdit) {
       if (!employeeId.trim()) {
-        errs.employeeId = "Login ID / Employee ID is required"
+        errs.employeeId = "Employee ID is required (auto-generated)"
       } else if (
         employees.some(
           e => e.id.toLowerCase() === employeeId.trim().toLowerCase()
         )
       ) {
-        errs.employeeId = `Login ID "${employeeId.trim().toUpperCase()}" is already assigned to another employee`
+        errs.employeeId = `Employee ID "${employeeId.trim().toUpperCase()}" is already assigned to another employee`
       }
 
       if (!password) {
@@ -194,11 +211,17 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
     if (!validate()) return
 
     if (isEdit && employeeToEdit) {
+      const deptObj = departments.find(d => d.name.toLowerCase() === department.toLowerCase() || d.id === department)
+      const deptIdForApi = deptObj?.id || (department === "Unassigned" ? undefined : department)
       updateEmployee(employeeToEdit.id, {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
         name: `${firstName.trim()} ${lastName.trim()}`,
         email: email.trim(),
         designation: designation.trim(),
-        department,
+        department: deptObj?.name || department,
+        departmentId: deptIdForApi,
+        departmentCode: deptObj?.code || undefined,
         phone: phone.trim(),
         location: location.trim(),
         accountStatus,
@@ -211,6 +234,8 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
 
       onOpenChange(false)
     } else {
+      const deptObj = departments.find(d => d.name.toLowerCase() === department.toLowerCase() || d.id === department)
+      const deptIdForApi = deptObj?.id || department
       const input: CreateEmployeeInput = {
         employeeId: employeeId.trim().toUpperCase(),
         firstName: firstName.trim(),
@@ -218,9 +243,9 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
         email: email.trim(),
         password: password.trim(),
         designation: designation.trim(),
-        department,
-        phone: phone.trim() || "+1 (555) 000-0000",
-        location: location.trim() || "Remote",
+        department: deptObj?.name || department,
+        phone: phone.trim(),
+        location: location.trim() || "Main HQ",
         accountStatus,
       }
       const created = createEmployee(input)
@@ -231,6 +256,7 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
         employeeId: created.id,
         password: password.trim(),
         name: `${created.firstName} ${created.lastName}`,
+        phone: phone.trim(),
         department: created.department,
         designation: created.designation,
       })
@@ -243,18 +269,23 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
         email: created.email,
         password: password.trim(),
         designation: created.designation,
-        departmentId: created.department,
-        phone: created.phone,
+        departmentId: deptIdForApi,
+        phone: phone.trim(),
         location: created.location,
         accountStatus: created.accountStatus || accountStatus,
+      }).then(() => {
+        refreshEmployees()
+        refreshDepartments()
       }).catch((err) => {
         console.warn("Backend API sync notice (offline mode fallback active):", err.message);
       })
 
       setProvisionedNotice({
         email: created.email,
+        phone: phone.trim(),
         tempPassword: password.trim(),
         id: created.id,
+        name: `${created.firstName} ${created.lastName}`,
       })
       if (onSuccess) onSuccess(created)
     }
@@ -262,10 +293,10 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
 
   const handleCopyAllCredentials = () => {
     if (!provisionedNotice) return
-    const text = `WorkTrack Portal Login Credentials:\nEmployee ID / Login ID: ${provisionedNotice.id}\nEmail: ${provisionedNotice.email}\nPassword: ${provisionedNotice.tempPassword}\n\nNote: In compliance with corporate policy, only administrators can manage credentials.`
+    const text = `WorkTrack Portal Login Credentials:\nEmployee Name: ${provisionedNotice.name || ""}\nEmployee ID: ${provisionedNotice.id}\nLogin ID (Phone Number): ${provisionedNotice.phone}\nWork Email: ${provisionedNotice.email}\nPassword: ${provisionedNotice.tempPassword}\n\nSign-In Portal: http://localhost:5173/login\nNote: In compliance with corporate policy, only administrators can manage credentials.`
     navigator.clipboard.writeText(text)
     setCopiedCredentials(true)
-    toast.success("Login ID, Email & Password copied to clipboard")
+    toast.success("Phone Number (Login ID), Employee ID & Password copied to clipboard")
     setTimeout(() => setCopiedCredentials(false), 2500)
   }
 
@@ -295,7 +326,7 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
               <DialogDescription className="text-sm text-slate-500 dark:text-slate-400">
                 {isEdit
                   ? "Update employee profile information, designation, department, and account password."
-                  : "Set employee record, assign Login ID, and configure login password."}
+                  : "Auto-generate Employee ID, assign Phone Number as Login ID, and configure login password."}
               </DialogDescription>
             </div>
           </div>
@@ -309,19 +340,28 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
                 <span>Account Created & Login Credentials Configured</span>
               </div>
               <p className="text-xs text-emerald-700 dark:text-emerald-300 leading-relaxed">
-                The employee record has been added. Login ID and Password were set exclusively by Admin. Employees cannot modify or reset their login credentials.
+                The employee record has been added. The employee will sign in using their Phone Number and the password configured below.
               </p>
             </div>
 
             <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-500">Employee Login ID:</span>
-                <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
+                <span className="text-slate-500">Employee ID:</span>
+                <span className="font-mono font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                   {provisionedNotice.id}
                 </span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-500">Login Email:</span>
+                <span className="text-slate-700 dark:text-slate-300 font-semibold flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
+                  <Phone className="w-3.5 h-3.5" />
+                  Employee Login ID (Phone):
+                </span>
+                <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded border border-indigo-200 dark:border-indigo-800">
+                  {provisionedNotice.phone}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-500">Work Email:</span>
                 <span className="font-mono font-medium text-slate-900 dark:text-slate-100">
                   {provisionedNotice.email}
                 </span>
@@ -331,7 +371,7 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
                   <KeyRound className="w-4 h-4 text-amber-500" />
                   Admin-Set Password:
                 </span>
-                <span className="font-mono font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800">
+                <span className="font-mono font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-2.5 py-1 rounded border border-amber-200 dark:border-amber-800">
                   {provisionedNotice.tempPassword}
                 </span>
               </div>
@@ -375,19 +415,19 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
               </p>
             </div>
 
-            {/* Login ID Section */}
-            <div className="p-3.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/50 space-y-2">
+            {/* 1. Employee ID (Auto-Generated) Section */}
+            <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="employeeId" className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                  <KeyRound className="w-3.5 h-3.5 text-indigo-500" />
-                  Employee Login ID <span className="text-rose-500">*</span>
+                  <KeyRound className="w-3.5 h-3.5 text-slate-500" />
+                  Employee ID <span className="text-slate-400 font-normal">(Auto-Generated)</span>
                 </Label>
                 {!isEdit && (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => setEmployeeId(generateNewLoginId())}
+                    onClick={() => setEmployeeId(generateNewEmployeeId())}
                     className="h-6 px-2 text-[11px] text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 gap-1 font-medium"
                   >
                     <RefreshCw className="w-3 h-3" />
@@ -407,22 +447,47 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
                 </div>
               ) : (
                 <div>
-                  <Input
-                    id="employeeId"
-                    value={employeeId}
-                    onChange={e => setEmployeeId(e.target.value.toUpperCase())}
-                    placeholder="e.g. EMP-1050"
-                    className={`font-mono text-xs uppercase bg-white dark:bg-slate-900 ${
-                      errors.employeeId ? "border-rose-500" : ""
-                    }`}
-                  />
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700/80">
+                    <span className="font-mono font-bold text-xs text-indigo-600 dark:text-indigo-400">
+                      {employeeId}
+                    </span>
+                    <Badge variant="secondary" className="text-[10px] bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 font-normal">
+                      Auto-Assigned
+                    </Badge>
+                  </div>
                   <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
-                    Unique corporate login identifier set by Admin.
+                    Unique corporate identification code automatically generated for workforce record.
                   </p>
-                  {errors.employeeId && (
-                    <p className="text-xs text-rose-500 mt-0.5">{errors.employeeId}</p>
-                  )}
                 </div>
+              )}
+            </div>
+
+            {/* 2. Employee Login ID (Phone Number) Section */}
+            <div className="p-3.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-900/60 space-y-2">
+              <Label htmlFor="phone" className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                Phone Number (Employee Login ID) <span className="text-rose-500">*</span>
+              </Label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <Phone className="w-3.5 h-3.5 text-slate-400" />
+                </div>
+                <Input
+                  id="phone"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  placeholder="e.g. 9876543210 or +91 9876543210"
+                  className={`pl-9 text-xs bg-white dark:bg-slate-900 font-medium ${
+                    errors.phone ? "border-rose-500" : ""
+                  }`}
+                  required
+                />
+              </div>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                The employee will use this <strong>Phone Number</strong> as their corporate Login ID to sign in.
+              </p>
+              {errors.phone && (
+                <p className="text-xs text-rose-500 mt-0.5">{errors.phone}</p>
               )}
             </div>
 
@@ -460,14 +525,14 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
             {/* Email */}
             <div className="space-y-1.5">
               <Label htmlFor="email" className="text-xs font-semibold">
-                Work Email (Login Email) <span className="text-rose-500">*</span>
+                Work Email <span className="text-rose-500">*</span>
               </Label>
               <Input
                 id="email"
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="alex.morgan@worktrack.io"
+                placeholder="alex.morgan@vamastudio.com"
                 className={errors.email ? "border-rose-500" : ""}
               />
               {errors.email && <p className="text-xs text-rose-500">{errors.email}</p>}
@@ -667,7 +732,7 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
                     <SelectValue placeholder="Select Department" />
                   </SelectTrigger>
                   <SelectContent>
-                    {departments.map(dept => (
+                    {(departments.some(d => !d.isArchived) ? departments.filter(d => !d.isArchived) : departments).map(dept => (
                       <SelectItem key={dept.id} value={dept.name}>
                         {dept.name}
                       </SelectItem>
@@ -678,20 +743,8 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
               </div>
             </div>
 
-            {/* Phone & Location */}
+            {/* Work Location & Account Status */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="phone" className="text-xs font-semibold">
-                  Phone Number
-                </Label>
-                <Input
-                  id="phone"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value)}
-                  placeholder="+1 (555) 234-5678"
-                />
-              </div>
-
               <div className="space-y-1.5">
                 <Label htmlFor="location" className="text-xs font-semibold">
                   Work Location
@@ -700,29 +753,28 @@ export const EmployeeFormDialog: React.FC<EmployeeFormDialogProps> = ({
                   id="location"
                   value={location}
                   onChange={e => setLocation(e.target.value)}
-                  placeholder="San Francisco / Remote"
+                  placeholder="San Francisco / Remote / Main HQ"
                 />
               </div>
-            </div>
 
-            {/* Account Status */}
-            <div className="space-y-1.5">
-              <Label htmlFor="status" className="text-xs font-semibold">
-                Account Status
-              </Label>
-              <Select
-                value={accountStatus}
-                onValueChange={val => setAccountStatus(val as EmployeeAccountStatus)}
-              >
-                <SelectTrigger id="status">
-                  <SelectValue placeholder="Select Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active (Full System Access)</SelectItem>
-                  <SelectItem value="inactive">Inactive (Temporary Pause)</SelectItem>
-                  <SelectItem value="deactivated">Deactivated (Archived Access)</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="space-y-1.5">
+                <Label htmlFor="status" className="text-xs font-semibold">
+                  Account Status
+                </Label>
+                <Select
+                  value={accountStatus}
+                  onValueChange={val => setAccountStatus(val as EmployeeAccountStatus)}
+                >
+                  <SelectTrigger id="status">
+                    <SelectValue placeholder="Select Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active (Full System Access)</SelectItem>
+                    <SelectItem value="inactive">Inactive (Temporary Pause)</SelectItem>
+                    <SelectItem value="deactivated">Deactivated (Archived Access)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <DialogFooter className="pt-4">

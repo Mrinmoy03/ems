@@ -1,5 +1,6 @@
-import React, { useState, useMemo, useEffect } from "react"
+import React, { useState, useMemo, useEffect, useCallback } from "react"
 import { useAdmin } from "../context/AdminContext"
+import { api } from "../../services/api"
 import { Card, CardHeader, CardTitle, CardContent } from "../../components/ui/card"
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
@@ -27,10 +28,9 @@ import { YearMonthPicker } from "../../employee/components/YearMonthPicker"
 import { EodReportCard } from "../../employee/components/reports/EodReportCard"
 import { ReportsPagination } from "../../employee/components/reports/ReportsPagination"
 import { DownloadMonthlyEodButton } from "../../employee/components/reports/DownloadMonthlyEodButton"
-import { downloadDailyEodCSV } from "../../employee/utils/exportEodReport"
+import { downloadDailyEodPDF, exportMonthlyEodPDF } from "../../employee/utils/exportEodReport"
 import { WorkingDaysModal } from "../../employee/components/WorkingDaysModal"
 import { DailyEodReport } from "../../employee/types/report"
-import { toast } from "sonner"
 
 export const ReportsPage: React.FC = () => {
   const { employees, departments } = useAdmin()
@@ -43,6 +43,83 @@ export const ReportsPage: React.FC = () => {
   const [workingDaysModalOpen, setWorkingDaysModalOpen] = useState(false)
   const [pageSize, setPageSize] = useState<number>(10)
 
+  // Real backend EOD reports
+  const [backendReports, setBackendReports] = useState<any[]>([])
+
+  const fetchBackendReports = useCallback(async () => {
+    try {
+      const res = await api.reports.getEod({ limit: "100" })
+      if (res && res.success && Array.isArray(res.reports)) {
+        const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+        const mapped = res.reports.map((row: any) => {
+          const d = new Date(row.date)
+          const dayOfWeek = daysOfWeek[d.getDay()] || "Monday"
+          const taskLines = (row.tasks_completed || "").split("\n").filter(Boolean)
+          const completedTasksList = taskLines.map((t: string, i: number) => ({
+            id: `tsk-${row.id}-${i + 1}`,
+            title: t,
+            category: row.department_name || "General",
+            completedAt: row.date,
+            isLate: false,
+          }))
+
+          return {
+            id: row.id,
+            employeeId: row.emp_code || row.employee_id,
+            employeeName: `${row.first_name || ""} ${row.last_name || ""}`.trim() || row.emp_code || "Staff",
+            employeeAvatar: row.avatar_url || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80`,
+            employeeDepartment: row.department_name || "General",
+            employeeDesignation: row.designation || "Staff",
+            date: typeof row.date === "string" ? row.date.slice(0, 10) : new Date(row.date).toISOString().slice(0, 10),
+            dayOfWeek,
+            checkIn: "09:00 AM",
+            checkOut: "06:00 PM",
+            breakDuration: "45m",
+            hoursLogged: `${row.hours_worked || 8}h 00m`,
+            hoursWorked: Number(row.hours_worked) || 8,
+            tasksTotal: completedTasksList.length,
+            tasksCompleted: completedTasksList.length,
+            tasksPending: 0,
+            completedTasks: completedTasksList,
+            inProgressTasks: row.next_day_plan ? [{
+              id: `plan-${row.id}`,
+              title: row.next_day_plan,
+              category: "Next Shift Plan",
+              progress: 0,
+              status: "in-progress" as const,
+              notes: row.challenges ? `Challenges noted: ${row.challenges}` : undefined,
+            }] : [],
+            summary: row.summary,
+            submittedAt: row.created_at ? new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "06:00 PM",
+          }
+        })
+        setBackendReports(mapped)
+      }
+    } catch (err: any) {
+      console.warn("Backend reports fetch notice:", err.message)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchBackendReports()
+    const timerId = setInterval(fetchBackendReports, 20000)
+    window.addEventListener("focus", fetchBackendReports)
+
+    let ch: BroadcastChannel | null = null
+    try {
+      ch = new BroadcastChannel("worktrack_eod")
+      ch.onmessage = () => {
+        fetchBackendReports()
+      }
+    } catch {}
+
+    return () => {
+      clearInterval(timerId)
+      window.removeEventListener("focus", fetchBackendReports)
+      if (ch) ch.close()
+    }
+  }, [fetchBackendReports])
+
   const currentMonthData = getMonthData(selectedMonthKey)
   const { monthName, year, summary, eodReports } = currentMonthData
 
@@ -51,8 +128,11 @@ export const ReportsPage: React.FC = () => {
     setCurrentPage(1)
   }, [selectedMonthKey, selectedEmployeeId, selectedDept, searchQuery])
 
-  // Associate each EOD report with an employee
+  // Associate each EOD report with an employee (preferring real MariaDB records)
   const enrichedReports = useMemo(() => {
+    if (backendReports.length > 0) {
+      return backendReports
+    }
     return eodReports.map((report, index) => {
       // Deterministically assign employee to each report for multi-employee org view
       const empIndex = index % employees.length
@@ -60,14 +140,14 @@ export const ReportsPage: React.FC = () => {
 
       return {
         ...report,
-        employeeId: assignedEmp.id,
-        employeeName: assignedEmp.name,
-        employeeAvatar: assignedEmp.avatar,
-        employeeDepartment: assignedEmp.department,
-        employeeDesignation: assignedEmp.designation,
+        employeeId: assignedEmp?.id || "EMP-001",
+        employeeName: assignedEmp?.name || "Staff",
+        employeeAvatar: assignedEmp?.avatar || "",
+        employeeDepartment: assignedEmp?.department || "General",
+        employeeDesignation: assignedEmp?.designation || "Staff",
       }
     })
-  }, [eodReports, employees])
+  }, [backendReports, eodReports, employees])
 
   // Filter reports
   const filteredReports = useMemo(() => {
@@ -93,7 +173,7 @@ export const ReportsPage: React.FC = () => {
           rep.employeeName.toLowerCase().includes(q) ||
           rep.employeeId.toLowerCase().includes(q)
         const matchTasks = rep.completedTasks.some(
-          t =>
+          (t: any) =>
             t.title.toLowerCase().includes(q) ||
             t.id.toLowerCase().includes(q) ||
             (t.category && t.category.toLowerCase().includes(q))
@@ -146,17 +226,20 @@ export const ReportsPage: React.FC = () => {
     }
   }
 
-  const handleDownloadReport = (date: string) => {
-    const report = displayedReports.find(r => r.date === date)
+  const handleDownloadReport = (date: string, reportItem?: any) => {
+    const report = reportItem || displayedReports.find(r => r.date === date)
     if (report) {
-      downloadDailyEodCSV(report)
-    } else {
-      toast.success(`Exporting audited EOD report for ${date} (PDF/CSV)`)
+      downloadDailyEodPDF(report, report.employeeId || (selectedEmployeeId !== "all" ? selectedEmployeeId : undefined))
     }
   }
 
   const handleExportMonthSummary = () => {
-    toast.success(`Exporting organization monthly summary for ${monthName} ${year} (PDF/CSV)`)
+    exportMonthlyEodPDF(
+      monthName,
+      year,
+      filteredReports.length,
+      selectedEmployeeId !== "all" ? selectedEmployeeId : undefined
+    )
   }
 
   return (

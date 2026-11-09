@@ -195,3 +195,20 @@ CREATE TABLE IF NOT EXISTS `comments` (
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
+-- 13. Notifications Table (Multi-role & targeted workforce alerts)
+CREATE TABLE IF NOT EXISTS `notifications` (
+  `id` VARCHAR(36) PRIMARY KEY,
+  `user_id` VARCHAR(36) NULL,
+  `role_target` ENUM('all', 'admin', 'super-admin', 'employee') NOT NULL DEFAULT 'all',
+  `title` VARCHAR(150) NOT NULL,
+  `message` TEXT NOT NULL,
+  `type` ENUM('task', 'leave', 'attendance', 'report', 'system') NOT NULL DEFAULT 'system',
+  `entity_id` VARCHAR(36) NULL,
+  `is_read` BOOLEAN NOT NULL DEFAULT FALSE,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_notif_user` (`user_id`),
+  INDEX `idx_notif_role` (`role_target`),
+  INDEX `idx_notif_read` (`is_read`),
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+

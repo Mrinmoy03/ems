@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from "react"
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from "react"
 import {
   Project,
   ProjectPart,
@@ -13,6 +13,8 @@ import {
   calculateOverallProjectProgress,
 } from "../utils/projectProgress"
 import { toast } from "sonner"
+
+const STORAGE_KEY_PROJECTS = "worktrack_projects"
 
 interface ProjectContextValue {
   projects: Project[]
@@ -50,7 +52,20 @@ interface ProjectContextValue {
 const ProjectContext = createContext<ProjectContextValue | undefined>(undefined)
 
 export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [projects, setProjects] = useState<Project[]>(initialMockProjects)
+  const [projects, setProjects] = useState<Project[]>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_PROJECTS)
+      return stored ? JSON.parse(stored) : initialMockProjects
+    } catch {
+      return initialMockProjects
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects))
+    } catch {}
+  }, [projects])
 
   const getProject = useCallback(
     (id: string) => {
