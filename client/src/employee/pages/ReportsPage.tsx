@@ -54,8 +54,10 @@ export const ReportsPage: React.FC = () => {
       if (res && res.success && Array.isArray(res.reports)) {
         const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
         const mapped: DailyEodReport[] = res.reports.map((row: any) => {
-          const d = new Date(row.date)
-          const dayOfWeek = daysOfWeek[d.getDay()] || "Monday"
+          const dateStr = typeof row.date === "string" ? row.date.split("T")[0] : new Date(row.date).toISOString().split("T")[0]
+          const [yr, mo, da] = dateStr.split("-").map(Number)
+          const dateObj = yr && mo && da ? new Date(yr, mo - 1, da) : new Date(row.date)
+          const dayOfWeek = daysOfWeek[dateObj.getDay()] || "Monday"
           const taskLines = (row.tasks_completed || "").split("\n").filter(Boolean)
           const completedTasksList = taskLines.map((t: string, i: number) => ({
             id: `tsk-${row.id}-${i + 1}`,
@@ -65,20 +67,27 @@ export const ReportsPage: React.FC = () => {
             isLate: false,
           }))
 
+          const checkInFormatted = row.check_in_time
+            ? new Date(row.check_in_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : "—"
+          const checkOutFormatted = row.check_out_time
+            ? new Date(row.check_out_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : (row.punch_out ? new Date(row.punch_out).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—")
+
           return {
             id: row.id,
-            date: typeof row.date === "string" ? row.date.slice(0, 10) : new Date(row.date).toISOString().slice(0, 10),
+            date: dateStr,
             dayOfWeek,
-            checkIn: "09:00 AM",
-            checkOut: "06:00 PM",
-            breakDuration: "45m",
-            hoursLogged: `${row.hours_worked || 8}h 00m`,
+            checkIn: checkInFormatted,
+            checkOut: checkOutFormatted,
+            breakDuration: "0m",
+            hoursLogged: `${Number(row.hours_worked || 8).toFixed(1)}h`,
             hoursWorked: Number(row.hours_worked) || 8,
             tasksTotal: completedTasksList.length,
             tasksCompleted: completedTasksList.length,
             tasksPending: 0,
             completedTasks: completedTasksList,
-            inProgressTasks: row.next_day_plan ? [{
+            inProgressTasks: row.next_day_plan && row.next_day_plan.trim() ? [{
               id: `plan-${row.id}`,
               title: row.next_day_plan,
               category: "Next Shift Plan",
@@ -87,7 +96,7 @@ export const ReportsPage: React.FC = () => {
               notes: row.challenges ? `Challenges noted: ${row.challenges}` : undefined,
             }] : [],
             summary: row.summary,
-            submittedAt: row.created_at ? new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "06:00 PM",
+            submittedAt: row.created_at ? new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—",
           }
         })
         setBackendReports(mapped)
@@ -198,11 +207,12 @@ export const ReportsPage: React.FC = () => {
     setCurrentPage(1)
   }, [selectedMonthKey, searchQuery])
 
-  // Filter EOD reports by search query
+  // Filter EOD reports by active month and search query
   const filteredReports = useMemo(() => {
-    if (!searchQuery.trim()) return allReports
+    const monthMatched = allReports.filter(r => !selectedMonthKey || r.date.startsWith(selectedMonthKey))
+    if (!searchQuery.trim()) return monthMatched
     const q = searchQuery.toLowerCase()
-    return allReports.filter(rep => {
+    return monthMatched.filter(rep => {
       const matchDate = rep.date.toLowerCase().includes(q) || (rep.dayOfWeek && rep.dayOfWeek.toLowerCase().includes(q))
       const matchSummary = rep.summary.toLowerCase().includes(q)
       const matchTasks = rep.completedTasks.some(
@@ -210,7 +220,20 @@ export const ReportsPage: React.FC = () => {
       )
       return matchDate || matchSummary || matchTasks
     })
-  }, [allReports, searchQuery])
+  }, [allReports, selectedMonthKey, searchQuery])
+
+  const pickerDaysCount = useMemo(() => {
+    const monthMatched = allReports.filter(r => !selectedMonthKey || r.date.startsWith(selectedMonthKey))
+    const dates = new Set(monthMatched.map(r => r.date))
+    return Math.max(dates.size, currentMonthData.summary.daysPresent)
+  }, [allReports, selectedMonthKey, currentMonthData.summary.daysPresent])
+
+  const pickerTaskCount = useMemo(() => {
+    const monthMatched = allReports.filter(r => !selectedMonthKey || r.date.startsWith(selectedMonthKey))
+    const count = monthMatched.reduce((acc, r) => acc + (r.completedTasks?.length || 0), 0)
+    const liveCompleted = tasks.filter(t => t.progress === 100 || t.status === "completed").length
+    return Math.max(count, liveCompleted, currentMonthData.summary.tasksCompleted)
+  }, [allReports, selectedMonthKey, tasks, currentMonthData.summary.tasksCompleted])
 
   // Pagination calculations
   const totalPages = Math.max(1, Math.ceil(filteredReports.length / pageSize))
@@ -286,6 +309,12 @@ export const ReportsPage: React.FC = () => {
           <YearMonthPicker
             selectedMonthKey={selectedMonthKey}
             onMonthChange={setSelectedMonthKey}
+            monthStats={{
+              [selectedMonthKey]: {
+                daysCount: pickerDaysCount,
+                taskCount: pickerTaskCount,
+              },
+            }}
           />
 
           <Button

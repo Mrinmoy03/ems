@@ -54,6 +54,55 @@ export function calculateTaskCounts(tasks: EmployeeTask[], referenceTime = new D
 }
 
 /**
+ * Returns today's date formatted as YYYY-MM-DD in local time
+ */
+export function getTodayDateString(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, "0")
+  const day = String(now.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+/**
+ * Determines if a task belongs to a specific calendar date view.
+ * 1. For Today:
+ *    - Incomplete tasks (pending, in-progress, overdue) carry forward and are shown for today.
+ *    - Completed tasks are ONLY shown if they were completed today. Tasks completed on prior days belong to history.
+ * 2. For any specific date (e.g. 2026-11-09):
+ *    - Matches tasks completed on that date, scheduled for that date, or created on that date.
+ * 3. For empty date (""):
+ *    - Matches all tasks across all dates.
+ */
+export function isTaskForDate(task: EmployeeTask, targetDateStr: string, todayStr = getTodayDateString()): boolean {
+  if (!targetDateStr) return true
+
+  const isCompleted = task.progress === 100 || task.status === "completed"
+  // Strictly DO NOT fall back to updatedAt: updatedAt gets modified on any record write/sync.
+  const completedDate = (task.completedAt || "").slice(0, 10)
+  const deadlineDate = (task.deadline || "").slice(0, 10)
+  const createdDate = (task.createdAt || "").slice(0, 10)
+
+  if (targetDateStr === todayStr) {
+    if (isCompleted) {
+      // Completed deliverables ONLY belong to today if they were completed today,
+      // or if scheduled for today and not completed on a prior date.
+      return (Boolean(completedDate) && completedDate === todayStr) || (!completedDate && deadlineDate === todayStr)
+    }
+    // Incomplete tasks (pending, in-progress, overdue) always carry forward and are shown in today's active tasks
+    return true
+  }
+
+  return (
+    completedDate === targetDateStr ||
+    deadlineDate === targetDateStr ||
+    createdDate === targetDateStr ||
+    Boolean(task.deadline && task.deadline.includes(targetDateStr)) ||
+    Boolean(task.completedAt && task.completedAt.includes(targetDateStr))
+  )
+}
+
+/**
  * Checks if a task was completed after its deadline or flagged as completed late.
  */
 export function isTaskCompletedLate(

@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { getCurrentMonthKey, getMonthData } from "../data/mockReports"
 import { YearMonthPicker } from "./YearMonthPicker"
@@ -12,6 +12,8 @@ import {
 } from "lucide-react"
 import { WorkingDaysModal } from "./WorkingDaysModal"
 import { useEmployee } from "../context/EmployeeContext"
+import { useAuth } from "../../auth/context/AuthContext"
+import { api } from "../../services/api"
 
 export interface MonthlySummaryProps {
   monthKey?: string
@@ -23,8 +25,10 @@ export const MonthlySummary: React.FC<MonthlySummaryProps> = ({
   onMonthChange,
 }) => {
   const { tasks, timer } = useEmployee()
+  const { user: authUser } = useAuth()
   const [internalMonthKey, setInternalMonthKey] = useState(() => getCurrentMonthKey())
   const [isWorkingDaysModalOpen, setIsWorkingDaysModalOpen] = useState(false)
+  const [backendReports, setBackendReports] = useState<any[]>([])
 
   const activeMonthKey = monthKey || internalMonthKey
   const handleSelectMonth = (key: string) => {
@@ -35,20 +39,62 @@ export const MonthlySummary: React.FC<MonthlySummaryProps> = ({
     }
   }
 
+  // Fetch verified EOD shift reports from database
+  useEffect(() => {
+    const empId = authUser?.employeeId || authUser?.id
+    if (!empId) return
+    api.reports.getEod({ employeeId: empId, limit: "100" })
+      .then(res => {
+        if (res && res.success && Array.isArray(res.reports)) {
+          setBackendReports(res.reports)
+        }
+      })
+      .catch(() => {})
+  }, [authUser])
+
   const monthData = getMonthData(activeMonthKey)
   const summary = monthData.summary
+
+  const monthBackendReports = useMemo(() => {
+    return backendReports.filter((r: any) => {
+      const d = typeof r.date === "string" ? r.date.slice(0, 7) : ""
+      return d === activeMonthKey
+    })
+  }, [backendReports, activeMonthKey])
+
+  const uniqueShiftDates = useMemo(() => {
+    return new Set(monthBackendReports.map((r: any) => typeof r.date === "string" ? r.date.slice(0, 10) : ""))
+  }, [monthBackendReports])
+
+  const backendDaysPresent = uniqueShiftDates.size
+  const backendHours = monthBackendReports.reduce((acc: number, r: any) => acc + (Number(r.hours_worked) || 0), 0)
+  const backendTasksCompleted = monthBackendReports.reduce((acc: number, r: any) => {
+    const lines = (r.tasks_completed || "").split("\n").filter(Boolean)
+    return acc + lines.length
+  }, 0)
 
   // If active period is current month, dynamically incorporate live completed tasks and timer hours
   const isCurrentActiveMonth = activeMonthKey === getCurrentMonthKey()
   const liveCompletedCount = tasks.filter(t => t.progress === 100 || t.status === "completed").length
-  const dynamicTasksCompleted = isCurrentActiveMonth ? summary.tasksCompleted + liveCompletedCount : summary.tasksCompleted
+  const dynamicTasksCompleted = Math.max(backendTasksCompleted, liveCompletedCount, summary.tasksCompleted)
   const todayHours = Number((timer.elapsedSeconds / 3600).toFixed(1))
-  const dynamicTotalHours = isCurrentActiveMonth ? (summary.totalHoursWorked + todayHours).toFixed(1) : `${summary.totalHoursWorked}`
+  const dynamicTotalHours = isCurrentActiveMonth
+    ? (Math.max(backendHours, summary.totalHoursWorked) + (timer.sessionState === "working" ? todayHours : 0)).toFixed(1)
+    : Math.max(backendHours, summary.totalHoursWorked).toFixed(1)
+
+  const dynamicDaysPresent = Math.max(
+    backendDaysPresent + (isCurrentActiveMonth && timer.sessionState === "working" && !uniqueShiftDates.has(new Date().toISOString().slice(0, 10)) ? 1 : 0),
+    summary.daysPresent
+  )
+
+  const dynamicAvgCompletion = dynamicTasksCompleted > 0
+    ? (Number(dynamicTotalHours) / dynamicTasksCompleted).toFixed(1)
+    : `${summary.averageCompletionHours}`
 
   const metrics = [
     {
       title: "Working Days",
-      value: `${summary.daysPresent}/${summary.workingDays}`,
+      value: `${dynamicDaysPresent}/${summary.workingDays}`,
       sub: "Present vs Total Scheduled",
       icon: Briefcase,
       color: "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950",
@@ -73,7 +119,7 @@ export const MonthlySummary: React.FC<MonthlySummaryProps> = ({
     },
     {
       title: "Avg Completion Time",
-      value: `${summary.averageCompletionHours}h`,
+      value: `${dynamicAvgCompletion}h`,
       sub: "Per Completed Assignment",
       icon: Timer,
       color: "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950",
@@ -100,6 +146,12 @@ export const MonthlySummary: React.FC<MonthlySummaryProps> = ({
               selectedMonthKey={activeMonthKey}
               onMonthChange={handleSelectMonth}
               variant="compact"
+              monthStats={{
+                [activeMonthKey]: {
+                  daysCount: dynamicDaysPresent,
+                  taskCount: dynamicTasksCompleted,
+                },
+              }}
             />
 
             <span className="text-[11px] text-slate-400 hidden sm:inline">Auto-compiled</span>

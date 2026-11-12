@@ -1,4 +1,4 @@
-import React, { useMemo } from "react"
+import React, { useMemo, useState, useEffect } from "react"
 import {
   BarChart,
   Bar,
@@ -12,10 +12,26 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { BarChart3 } from "lucide-react"
 import { useEmployee } from "../../context/EmployeeContext"
+import { useAuth } from "../../../auth/context/AuthContext"
+import { api } from "../../../services/api"
 
 export const HoursWorkedChart: React.FC = () => {
   const { timer } = useEmployee()
+  const { user: authUser } = useAuth()
   const todayHours = Number((timer.elapsedSeconds / 3600).toFixed(1))
+  const [weekReports, setWeekReports] = useState<any[]>([])
+
+  useEffect(() => {
+    const empId = authUser?.employeeId || authUser?.id
+    if (!empId) return
+    api.reports.getEod({ employeeId: empId, limit: "30" })
+      .then(res => {
+        if (res && res.success && Array.isArray(res.reports)) {
+          setWeekReports(res.reports)
+        }
+      })
+      .catch(() => {})
+  }, [authUser])
 
   const currentDayOfWeek = new Date().getDay() // 0 = Sun, 1 = Mon, ..., 6 = Sat
   const dayIndexMap: Record<string, number> = {
@@ -29,19 +45,41 @@ export const HoursWorkedChart: React.FC = () => {
 
   const chartData = useMemo(() => {
     const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-    return days.map(day => {
+
+    // Find the start of current week (Monday)
+    const now = new Date()
+    const currentDay = now.getDay()
+    const diffToMonday = (currentDay === 0 ? -6 : 1) - currentDay
+    const monday = new Date(now)
+    monday.setDate(now.getDate() + diffToMonday)
+
+    return days.map((day, idx) => {
       const isToday = dayIndexMap[day] === currentDayOfWeek
+      const targetDate = new Date(monday)
+      targetDate.setDate(monday.getDate() + idx)
+      const dateStr = targetDate.toISOString().slice(0, 10)
+
+      // Look for a report matching this date
+      const matching = weekReports.find(r => {
+        const rDate = typeof r.date === "string" ? r.date.slice(0, 10) : ""
+        return rDate === dateStr
+      })
+
+      const reportedHours = matching ? Number(matching.hours_worked || 0) : 0
+      const hours = isToday ? Math.max(reportedHours, todayHours) : reportedHours
+
       return {
         day,
-        hours: isToday ? todayHours : 0,
+        hours: Number(hours.toFixed(1)),
         target: 8.0,
       }
     })
-  }, [todayHours, currentDayOfWeek])
+  }, [weekReports, todayHours, currentDayOfWeek])
 
   const weeklyTotal = useMemo(() => {
-    return todayHours.toFixed(1)
-  }, [todayHours])
+    const total = chartData.reduce((acc, d) => acc + d.hours, 0)
+    return total.toFixed(1)
+  }, [chartData])
   return (
     <Card className="border-slate-200/90 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
       <CardHeader className="p-4 pb-2 border-b border-slate-100 dark:border-slate-800 flex flex-row items-center justify-between">

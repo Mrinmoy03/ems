@@ -231,6 +231,9 @@ export const updateEmployee = async (req: Request, res: Response): Promise<void>
       phone,
       location,
       accountStatus,
+      avatar_url,
+      avatarUrl,
+      avatar,
     } = req.body;
 
     // Find the employee record
@@ -245,6 +248,20 @@ export const updateEmployee = async (req: Request, res: Response): Promise<void>
     }
 
     const currentEmp = empRows[0];
+
+    // Authorization: User can update if admin/super-admin OR if updating their own account
+    const requester = (req as any).user;
+    if (requester) {
+      const isSelf = requester.employeeId === currentEmp.employee_id ||
+                     requester.employeeId === currentEmp.id ||
+                     requester.id === currentEmp.user_id ||
+                     requester.id === currentEmp.id;
+      const isAdmin = requester.role === "admin" || requester.role === "super-admin";
+      if (!isSelf && !isAdmin) {
+        res.status(403).json({ success: false, message: "Unauthorized to update this employee's profile." });
+        return;
+      }
+    }
 
     await connection.beginTransaction();
 
@@ -300,6 +317,8 @@ export const updateEmployee = async (req: Request, res: Response): Promise<void>
     if (deptSearch !== undefined) { empUpdates.push("department_id = ?"); empValues.push(resolvedDeptId); }
     if (location !== undefined) { empUpdates.push("location = ?"); empValues.push(location.trim()); }
     if (accountStatus) { empUpdates.push("status = ?"); empValues.push(accountStatus); }
+    const finalAvatar = avatar_url !== undefined ? avatar_url : (avatarUrl !== undefined ? avatarUrl : avatar);
+    if (finalAvatar !== undefined) { empUpdates.push("avatar_url = ?"); empValues.push(finalAvatar); }
 
     if (empUpdates.length > 0) {
       empValues.push(currentEmp.id);
@@ -368,6 +387,60 @@ export const updateEmployeePassword = async (req: Request, res: Response): Promi
     res.status(200).json({
       success: true,
       message: `Login credentials updated for ${empRows[0].first_name} ${empRows[0].last_name}.`,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateEmployeeAvatar = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { avatarUrl, avatar, avatar_url } = req.body;
+    const finalAvatar = avatarUrl !== undefined ? avatarUrl : (avatar !== undefined ? avatar : avatar_url);
+
+    if (finalAvatar === undefined || finalAvatar === null) {
+      res.status(400).json({ success: false, message: "Avatar image data or URL is required." });
+      return;
+    }
+
+    // Find employee
+    const [empRows]: any = await pool.query(
+      "SELECT id, user_id, employee_id, first_name, last_name FROM employees WHERE id = ? OR employee_id = ?",
+      [id, id]
+    );
+
+    if (!empRows || empRows.length === 0) {
+      res.status(404).json({ success: false, message: "Employee not found." });
+      return;
+    }
+
+    const currentEmp = empRows[0];
+
+    // Authorization: User can update if admin/super-admin OR if updating their own account
+    const requester = (req as any).user;
+    if (requester) {
+      const isSelf = requester.employeeId === currentEmp.employee_id ||
+                     requester.employeeId === currentEmp.id ||
+                     requester.id === currentEmp.user_id ||
+                     requester.id === currentEmp.id;
+      const isAdmin = requester.role === "admin" || requester.role === "super-admin";
+      if (!isSelf && !isAdmin) {
+        res.status(403).json({ success: false, message: "Unauthorized to update this employee's avatar." });
+        return;
+      }
+    }
+
+    await pool.query(
+      "UPDATE employees SET avatar_url = ? WHERE id = ?",
+      [finalAvatar, currentEmp.id]
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Profile photo updated and saved successfully.",
+      avatarUrl: finalAvatar,
+      employeeId: currentEmp.employee_id,
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });

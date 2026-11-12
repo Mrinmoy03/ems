@@ -143,10 +143,12 @@ export const EodReportCard: React.FC<EodReportCardProps> = ({
           {/* In collapsed state: compact punch in/out pill */}
           {!isExpanded && (
             <span className="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-mono hidden md:inline-flex items-center gap-1 ml-auto lg:ml-0">
-              <span>{report.checkIn || "08:45 AM"}</span>
+              <span>{report.checkIn || "—"}</span>
               <span>→</span>
-              <span>{report.checkOut || "06:00 PM"}</span>
-              <span className="text-slate-400">({timing.breakFormatted} break)</span>
+              <span>{report.checkOut || (isLiveSession ? "Active Session" : "—")}</span>
+              {timing.breakMinutes > 0 && (
+                <span className="text-slate-400">({timing.breakFormatted} break)</span>
+              )}
             </span>
           )}
         </div>

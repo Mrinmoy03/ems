@@ -14,7 +14,6 @@ import {
   LogOut,
   X,
   Briefcase,
-  PanelLeftClose,
 } from "lucide-react"
 import {
   Dialog,
@@ -150,19 +149,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               </span>
             </div>
           </div>
-
-          {/* Desktop collapse toggle button when expanded */}
-          {!isCollapsed && onToggleCollapse && (
-            <button
-              type="button"
-              onClick={onToggleCollapse}
-              className="hidden lg:flex p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/80 transition-colors"
-              title="Collapse sidebar"
-              aria-label="Collapse sidebar"
-            >
-              <PanelLeftClose className="h-4 w-4" />
-            </button>
-          )}
 
           {/* Mobile close button */}
           <button

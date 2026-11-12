@@ -20,7 +20,7 @@ import {
 } from "lucide-react"
 
 export const DashboardPage: React.FC = () => {
-  const { taskCounts, timer } = useEmployee()
+  const { todayTaskCounts, timer } = useEmployee()
   const rightColumnRef = useRef<HTMLDivElement>(null)
   const [rightHeight, setRightHeight] = useState<number | undefined>(undefined)
 
@@ -67,7 +67,7 @@ export const DashboardPage: React.FC = () => {
           />
           <StatCard
             title="Total Tasks"
-            value={taskCounts.all}
+            value={todayTaskCounts.all}
             subValue="Today's workload"
             icon={ListTodo}
             iconColor="text-slate-700"
@@ -75,8 +75,8 @@ export const DashboardPage: React.FC = () => {
           />
           <StatCard
             title="Completed"
-            value={taskCounts.completed}
-            subValue={`${taskCounts.all > 0 ? Math.round((taskCounts.completed / taskCounts.all) * 100) : 0}% of assignments`}
+            value={todayTaskCounts.completed}
+            subValue={`${todayTaskCounts.all > 0 ? Math.round((todayTaskCounts.completed / todayTaskCounts.all) * 100) : 0}% of assignments`}
             icon={CheckCircle2}
             iconColor="text-emerald-600"
             iconBg="bg-emerald-50"
@@ -85,7 +85,7 @@ export const DashboardPage: React.FC = () => {
           />
           <StatCard
             title="In Progress"
-            value={taskCounts.inProgress}
+            value={todayTaskCounts.inProgress}
             subValue="Active assignments"
             icon={Timer}
             iconColor="text-amber-600"
@@ -95,13 +95,13 @@ export const DashboardPage: React.FC = () => {
           />
           <StatCard
             title="Overdue"
-            value={taskCounts.overdue}
-            subValue={taskCounts.overdue > 0 ? "Requires attention" : "All on schedule"}
+            value={todayTaskCounts.overdue}
+            subValue={todayTaskCounts.overdue > 0 ? "Requires attention" : "All on schedule"}
             icon={AlertOctagon}
-            iconColor="text-red-600"
-            iconBg="bg-red-50"
-            accentColor={taskCounts.overdue > 0 ? "bg-red-100 text-red-800" : "bg-slate-100 text-slate-600"}
-            badgeText={taskCounts.overdue > 0 ? "Action needed" : "Clean"}
+            iconColor={todayTaskCounts.overdue > 0 ? "text-red-600" : "text-slate-600"}
+            iconBg={todayTaskCounts.overdue > 0 ? "bg-red-50" : "bg-slate-100"}
+            accentColor={todayTaskCounts.overdue > 0 ? "bg-red-100 text-red-800" : "bg-slate-100 text-slate-600"}
+            badgeText={todayTaskCounts.overdue > 0 ? "Action needed" : "Clean"}
           />
         </div>
       </section>

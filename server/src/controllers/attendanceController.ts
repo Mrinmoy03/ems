@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import pool from "../config/db";
+import { syncAttendanceToEodReports } from "./reportController";
 import { createNotificationInternal } from "./notificationController";
 
 const generateId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
@@ -9,7 +10,19 @@ export const getAttendance = async (req: Request, res: Response): Promise<void> 
     const { employeeId, date, month, year } = req.query;
 
     let query = `
-      SELECT a.*, e.first_name, e.last_name, e.employee_id as emp_code, d.name as department_name
+      SELECT a.id,
+             a.employee_id,
+             CAST(a.date AS CHAR) as date,
+             a.punch_in,
+             a.punch_out,
+             a.total_duration_seconds,
+             a.status,
+             a.created_at,
+             a.updated_at,
+             e.first_name,
+             e.last_name,
+             e.employee_id as emp_code,
+             d.name as department_name
       FROM attendance a
       JOIN employees e ON a.employee_id = e.id
       LEFT JOIN departments d ON e.department_id = d.id
@@ -62,6 +75,10 @@ export const punchIn = async (req: Request, res: Response): Promise<void> => {
     );
 
     if (!empRows || empRows.length === 0) {
+      if (rawEmpId.startsWith("ADM") || rawEmpId.startsWith("SA") || (req as any).user?.role === "admin" || (req as any).user?.role === "super-admin") {
+        res.status(200).json({ success: true, message: "Administrative role bypass: shift attendance tracking is not required for management." });
+        return;
+      }
       res.status(404).json({ success: false, message: `Employee record not found for: ${rawEmpId}` });
       return;
     }
@@ -137,6 +154,10 @@ export const punchOut = async (req: Request, res: Response): Promise<void> => {
     );
 
     if (!empRows || empRows.length === 0) {
+      if (rawEmpId.startsWith("ADM") || rawEmpId.startsWith("SA") || (req as any).user?.role === "admin" || (req as any).user?.role === "super-admin") {
+        res.status(200).json({ success: true, message: "Administrative role bypass: shift attendance tracking is not required for management." });
+        return;
+      }
       res.status(404).json({ success: false, message: "Employee not found." });
       return;
     }
@@ -165,6 +186,11 @@ export const punchOut = async (req: Request, res: Response): Promise<void> => {
        WHERE id = ?`,
       [now, durationSeconds, existing[0].id]
     );
+
+    // Auto-sync completed shift to eod_reports
+    try {
+      await syncAttendanceToEodReports(empDbId);
+    } catch {}
 
     res.status(200).json({
       success: true,

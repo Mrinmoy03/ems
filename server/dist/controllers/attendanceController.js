@@ -5,13 +5,26 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.punchOut = exports.punchIn = exports.getAttendance = void 0;
 const db_1 = __importDefault(require("../config/db"));
+const reportController_1 = require("./reportController");
 const notificationController_1 = require("./notificationController");
 const generateId = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
 const getAttendance = async (req, res) => {
     try {
         const { employeeId, date, month, year } = req.query;
         let query = `
-      SELECT a.*, e.first_name, e.last_name, e.employee_id as emp_code, d.name as department_name
+      SELECT a.id,
+             a.employee_id,
+             CAST(a.date AS CHAR) as date,
+             a.punch_in,
+             a.punch_out,
+             a.total_duration_seconds,
+             a.status,
+             a.created_at,
+             a.updated_at,
+             e.first_name,
+             e.last_name,
+             e.employee_id as emp_code,
+             d.name as department_name
       FROM attendance a
       JOIN employees e ON a.employee_id = e.id
       LEFT JOIN departments d ON e.department_id = d.id
@@ -55,6 +68,10 @@ const punchIn = async (req, res) => {
         const [empRows] = await db_1.default.query(`SELECT id, employee_id, first_name, last_name FROM employees 
        WHERE id = ? OR employee_id = ? OR user_id = ?`, [rawEmpId, rawEmpId, rawEmpId]);
         if (!empRows || empRows.length === 0) {
+            if (rawEmpId.startsWith("ADM") || rawEmpId.startsWith("SA") || req.user?.role === "admin" || req.user?.role === "super-admin") {
+                res.status(200).json({ success: true, message: "Administrative role bypass: shift attendance tracking is not required for management." });
+                return;
+            }
             res.status(404).json({ success: false, message: `Employee record not found for: ${rawEmpId}` });
             return;
         }
@@ -113,6 +130,10 @@ const punchOut = async (req, res) => {
         const [empRows] = await db_1.default.query(`SELECT id, employee_id FROM employees 
        WHERE id = ? OR employee_id = ? OR user_id = ?`, [rawEmpId, rawEmpId, rawEmpId]);
         if (!empRows || empRows.length === 0) {
+            if (rawEmpId.startsWith("ADM") || rawEmpId.startsWith("SA") || req.user?.role === "admin" || req.user?.role === "super-admin") {
+                res.status(200).json({ success: true, message: "Administrative role bypass: shift attendance tracking is not required for management." });
+                return;
+            }
             res.status(404).json({ success: false, message: "Employee not found." });
             return;
         }
@@ -130,6 +151,11 @@ const punchOut = async (req, res) => {
         await db_1.default.query(`UPDATE attendance
        SET punch_out = ?, total_duration_seconds = ?
        WHERE id = ?`, [now, durationSeconds, existing[0].id]);
+        // Auto-sync completed shift to eod_reports
+        try {
+            await (0, reportController_1.syncAttendanceToEodReports)(empDbId);
+        }
+        catch { }
         res.status(200).json({
             success: true,
             message: "Shift concluded. Punched out successfully at " + now.toLocaleTimeString(),

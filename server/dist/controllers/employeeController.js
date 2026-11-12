@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateEmployeePassword = exports.updateEmployee = exports.createEmployee = exports.getEmployeeById = exports.getAllEmployees = void 0;
+exports.updateEmployeeAvatar = exports.updateEmployeePassword = exports.updateEmployee = exports.createEmployee = exports.getEmployeeById = exports.getAllEmployees = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const db_1 = __importDefault(require("../config/db"));
 // Helper to generate a random or structured UUID
@@ -180,7 +180,7 @@ const updateEmployee = async (req, res) => {
     const connection = await db_1.default.getConnection();
     try {
         const { id } = req.params;
-        const { firstName, lastName, email, designation, departmentId, department, phone, location, accountStatus, } = req.body;
+        const { firstName, lastName, email, designation, departmentId, department, phone, location, accountStatus, avatar_url, avatarUrl, avatar, } = req.body;
         // Find the employee record
         const [empRows] = await connection.query("SELECT id, user_id, employee_id, email, phone FROM employees WHERE id = ? OR employee_id = ?", [id, id]);
         if (!empRows || empRows.length === 0) {
@@ -188,6 +188,19 @@ const updateEmployee = async (req, res) => {
             return;
         }
         const currentEmp = empRows[0];
+        // Authorization: User can update if admin/super-admin OR if updating their own account
+        const requester = req.user;
+        if (requester) {
+            const isSelf = requester.employeeId === currentEmp.employee_id ||
+                requester.employeeId === currentEmp.id ||
+                requester.id === currentEmp.user_id ||
+                requester.id === currentEmp.id;
+            const isAdmin = requester.role === "admin" || requester.role === "super-admin";
+            if (!isSelf && !isAdmin) {
+                res.status(403).json({ success: false, message: "Unauthorized to update this employee's profile." });
+                return;
+            }
+        }
         await connection.beginTransaction();
         // Check duplicate email if changing
         if (email && email.toLowerCase().trim() !== currentEmp.email.toLowerCase()) {
@@ -251,6 +264,11 @@ const updateEmployee = async (req, res) => {
         if (accountStatus) {
             empUpdates.push("status = ?");
             empValues.push(accountStatus);
+        }
+        const finalAvatar = avatar_url !== undefined ? avatar_url : (avatarUrl !== undefined ? avatarUrl : avatar);
+        if (finalAvatar !== undefined) {
+            empUpdates.push("avatar_url = ?");
+            empValues.push(finalAvatar);
         }
         if (empUpdates.length > 0) {
             empValues.push(currentEmp.id);
@@ -321,3 +339,45 @@ const updateEmployeePassword = async (req, res) => {
     }
 };
 exports.updateEmployeePassword = updateEmployeePassword;
+const updateEmployeeAvatar = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { avatarUrl, avatar, avatar_url } = req.body;
+        const finalAvatar = avatarUrl !== undefined ? avatarUrl : (avatar !== undefined ? avatar : avatar_url);
+        if (finalAvatar === undefined || finalAvatar === null) {
+            res.status(400).json({ success: false, message: "Avatar image data or URL is required." });
+            return;
+        }
+        // Find employee
+        const [empRows] = await db_1.default.query("SELECT id, user_id, employee_id, first_name, last_name FROM employees WHERE id = ? OR employee_id = ?", [id, id]);
+        if (!empRows || empRows.length === 0) {
+            res.status(404).json({ success: false, message: "Employee not found." });
+            return;
+        }
+        const currentEmp = empRows[0];
+        // Authorization: User can update if admin/super-admin OR if updating their own account
+        const requester = req.user;
+        if (requester) {
+            const isSelf = requester.employeeId === currentEmp.employee_id ||
+                requester.employeeId === currentEmp.id ||
+                requester.id === currentEmp.user_id ||
+                requester.id === currentEmp.id;
+            const isAdmin = requester.role === "admin" || requester.role === "super-admin";
+            if (!isSelf && !isAdmin) {
+                res.status(403).json({ success: false, message: "Unauthorized to update this employee's avatar." });
+                return;
+            }
+        }
+        await db_1.default.query("UPDATE employees SET avatar_url = ? WHERE id = ?", [finalAvatar, currentEmp.id]);
+        res.status(200).json({
+            success: true,
+            message: "Profile photo updated and saved successfully.",
+            avatarUrl: finalAvatar,
+            employeeId: currentEmp.employee_id,
+        });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.updateEmployeeAvatar = updateEmployeeAvatar;

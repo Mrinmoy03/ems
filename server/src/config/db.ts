@@ -9,6 +9,7 @@ const pool = mysql.createPool({
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "",
   database: process.env.DB_NAME || "worktrack_ems",
+  dateStrings: true,
   waitForConnections: true,
   connectionLimit: 15,
   queueLimit: 0,

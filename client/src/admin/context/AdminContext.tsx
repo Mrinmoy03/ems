@@ -247,7 +247,9 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children, initialR
       if (res && res.success && Array.isArray(res.attendance)) {
         const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
         const mapped: AdminAttendanceDay[] = res.attendance.map((a: any) => {
-          const dateObj = new Date(a.date)
+          const dateStr = typeof a.date === "string" ? a.date.split("T")[0] : new Date(a.date).toISOString().split("T")[0]
+          const [yr, mo, da] = dateStr.split("-").map(Number)
+          const dateObj = yr && mo && da ? new Date(yr, mo - 1, da) : new Date(a.date)
           const dayOfWeek = days[dateObj.getDay()] || "Mon"
           const totalSec = a.total_duration_seconds || 0
           const netHours = Number((totalSec / 3600).toFixed(2))
@@ -274,7 +276,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children, initialR
             employeeName: `${a.first_name || ""} ${a.last_name || ""}`.trim() || a.employee_id,
             employeeAvatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80`,
             department: a.department_name || "General",
-            date: typeof a.date === "string" ? a.date.slice(0, 10) : new Date(a.date).toISOString().slice(0, 10),
+            date: dateStr,
             dayOfWeek,
             checkIn,
             checkOut,
@@ -322,6 +324,13 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children, initialR
             priority: row.priority || "medium",
             createdAt: row.created_at || new Date().toISOString(),
             updatedAt: row.updated_at || new Date().toISOString(),
+            completedAt: (row.status === "completed" || Number(row.progress) === 100)
+              ? (row.completed_at
+                  ? (typeof row.completed_at === "string" ? row.completed_at : new Date(row.completed_at).toISOString())
+                  : (row.deadline
+                      ? (typeof row.deadline === "string" ? row.deadline : new Date(row.deadline).toISOString())
+                      : row.created_at || new Date().toISOString()))
+              : undefined,
             deadlineHistory: row.delay_reason
               ? [
                   {
@@ -405,6 +414,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children, initialR
     let chAttendance: BroadcastChannel | null = null
     let chTasks: BroadcastChannel | null = null
     let chLeave: BroadcastChannel | null = null
+    let chEmployees: BroadcastChannel | null = null
     try {
       chAttendance = new BroadcastChannel("worktrack_attendance")
       chAttendance.onmessage = () => {
@@ -420,6 +430,10 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children, initialR
       chLeave.onmessage = () => {
         refreshLeaveRequests()
       }
+      chEmployees = new BroadcastChannel("worktrack_employees")
+      chEmployees.onmessage = () => {
+        refreshEmployees()
+      }
     } catch {}
 
     return () => {
@@ -428,6 +442,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children, initialR
       if (chAttendance) chAttendance.close()
       if (chTasks) chTasks.close()
       if (chLeave) chLeave.close()
+      if (chEmployees) chEmployees.close()
     }
   }, [refreshEmployees, refreshDepartments, refreshAttendance, refreshTasks, refreshLeaveRequests])
 
@@ -577,10 +592,16 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children, initialR
       departmentId: deptId,
       location: updates.location,
       accountStatus: updates.accountStatus,
+      avatarUrl: updates.avatarUrl || updates.avatar,
     }).then(() => {
       // Re-sync employees and departments to get accurate department_name, department_code, and department employee_count
       refreshEmployees()
       refreshDepartments()
+      try {
+        const ch = new BroadcastChannel("worktrack_employees")
+        ch.postMessage({ type: "EMPLOYEE_UPDATED", id })
+        ch.close()
+      } catch {}
     }).catch(err => {
       console.warn("Backend employee update notice:", err.message)
     })

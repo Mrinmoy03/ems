@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS `employees` (
   `designation` VARCHAR(100) NOT NULL,
   `department_id` VARCHAR(36),
   `location` VARCHAR(100) DEFAULT 'Main HQ',
-  `avatar_url` VARCHAR(255),
+  `avatar_url` MEDIUMTEXT,
   `join_date` DATE NOT NULL,
   `status` ENUM('active', 'inactive', 'suspended') NOT NULL DEFAULT 'active',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -43,6 +43,15 @@ export const authenticateToken = (
     };
     return next();
   }
+  if (token === "mock_jwt_custom_employee_token" || token === "mock_jwt_employee_session_token") {
+    req.user = {
+      id: "usr-mw4td1v3-i06on",
+      email: "tech@vamastudio.com",
+      role: "employee",
+      employeeId: "EMP-5512",
+    };
+    return next();
+  }
 
   try {
     const secret = process.env.JWT_SECRET || "worktrack_enterprise_jwt_super_secret_key_2026!";

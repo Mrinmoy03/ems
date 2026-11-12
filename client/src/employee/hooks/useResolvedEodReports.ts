@@ -3,7 +3,7 @@ import { format } from "date-fns"
 import { DailyEodReport, MonthData } from "../types/report"
 import { EmployeeTask } from "../types/task"
 import { WorkSessionState } from "../types/timer"
-import { isTaskCompletedLate } from "../utils/taskStatus"
+import { isTaskCompletedLate, getTodayDateString } from "../utils/taskStatus"
 import { formatDurationToHuman } from "../utils/formatDuration"
 import { formatStandardDate } from "../utils/date"
 import { getCurrentMonthKey } from "../data/mockReports"
@@ -16,6 +16,7 @@ interface UseResolvedEodReportsParams {
     sessionState: WorkSessionState
     elapsedSeconds: number
     logoutTime?: string | null
+    breaks?: { durationSeconds?: number }[]
   }
 }
 
@@ -41,8 +42,17 @@ export function useResolvedEodReports({
     tomorrow.setDate(tomorrow.getDate() + 1)
     const nextShiftLabel = `Next Shift (${format(tomorrow, "MMM dd, yyyy")})`
 
-    // Live tasks that are completed (progress === 100 or status === "completed")
-    const completedStateTasks = tasks.filter(t => t.progress === 100 || t.status === "completed")
+    const todayStr = getTodayDateString()
+
+    // Live tasks that are completed TODAY (progress === 100 or status === "completed")
+    // Past completed tasks (e.g. completed on Nov 9) must NOT be attributed to today's shift!
+    const completedStateTasks = tasks.filter(t => {
+      const isCompleted = t.progress === 100 || t.status === "completed"
+      if (!isCompleted) return false
+      const compDate = (t.completedAt || "").slice(0, 10)
+      const deadDate = (t.deadline || "").slice(0, 10)
+      return (Boolean(compDate) && compDate === todayStr) || (!compDate && deadDate === todayStr)
+    })
 
     // Live tasks that are in-progress / overdue / pending (progress < 100 and status !== "completed")
     const liveInProgressTasks = tasks
@@ -59,9 +69,9 @@ export function useResolvedEodReports({
 
     return baseReports.map((rep, idx) => {
       const matchingDay = currentMonthData.workingDays?.find(w => w.date === rep.date)
-      const fallbackCheckIn = rep.checkIn || matchingDay?.checkIn || "08:45 AM"
-      const fallbackCheckOut = rep.checkOut || matchingDay?.checkOut || "06:00 PM"
-      const fallbackBreak = rep.breakDuration || matchingDay?.breakDuration || "45m"
+      const fallbackCheckIn = rep.checkIn || matchingDay?.checkIn || "—"
+      const fallbackCheckOut = rep.checkOut || matchingDay?.checkOut || "—"
+      const fallbackBreak = rep.breakDuration || matchingDay?.breakDuration || "0m"
 
       // Historical reports (idx !== 0)
       if (idx !== 0) {
@@ -117,7 +127,9 @@ export function useResolvedEodReports({
         checkOut: isLoggedOut
           ? (timer.logoutTime ? new Date(timer.logoutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "05:45 PM")
           : "Live Session (Active Shift)",
-        breakDuration: "45m",
+        breakDuration: timer.breaks
+          ? `${Math.round(timer.breaks.reduce((acc: number, b: { durationSeconds?: number }) => acc + (b.durationSeconds || 0), 0) / 60)}m`
+          : fallbackBreak,
         hoursLogged: isLoggedOut
           ? `${formattedWorkedHours} logged`
           : `${formattedWorkedHours} (live session)`,
@@ -127,10 +139,10 @@ export function useResolvedEodReports({
           : "Active Shift (Auto-submits on Logout)",
         tasksCompleted: combinedTasks.length,
         tasksCompletedLate: lateCount,
-        tasksPending: liveInProgressTasks.length,
-        tasksInProgressCount: liveInProgressTasks.length,
+        tasksPending: 0,
+        tasksInProgressCount: 0,
         completedTasks: combinedTasks,
-        inProgressTasks: liveInProgressTasks,
+        inProgressTasks: [],
         summary: isLoggedOut
           ? `Today's shift finalized and submitted upon logout. Delivered ${combinedTasks.length} deliverables with ${liveInProgressTasks.length} in-progress tasks carried forward to next shift. Total ${formattedWorkedHours} logged.`
           : isOnBreak

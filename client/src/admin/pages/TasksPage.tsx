@@ -28,11 +28,13 @@ import {
   Search,
   Plus,
   CalendarClock,
+  Calendar,
   Clock,
   UserCheck,
   ShieldCheck,
   AlertCircle,
   FolderKanban,
+  X,
 } from "lucide-react"
 import { useProjects } from "../../context/ProjectContext"
 
@@ -44,8 +46,18 @@ export const TasksPage: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>("all")
   const [selectedPriority, setSelectedPriority] = useState<string>("all")
   const [selectedProject, setSelectedProject] = useState<string>("all")
+  const [selectedDate, setSelectedDate] = useState<string>("")
   const [currentPage, setCurrentPage] = useState<number>(1)
   const [pageSize, setPageSize] = useState<number>(10)
+
+  // Current local calendar date for "Today" filter shortcut (YYYY-MM-DD)
+  const todayStr = useMemo(() => {
+    const d = new Date()
+    const yr = d.getFullYear()
+    const mo = String(d.getMonth() + 1).padStart(2, "0")
+    const da = String(d.getDate()).padStart(2, "0")
+    return `${yr}-${mo}-${da}`
+  }, [])
 
   // Modals state
   const [isAssignOpen, setIsAssignOpen] = useState(false)
@@ -54,7 +66,7 @@ export const TasksPage: React.FC = () => {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, selectedStatus, selectedPriority, selectedProject])
+  }, [searchTerm, selectedStatus, selectedPriority, selectedProject, selectedDate])
 
   const filteredTasks = useMemo(() => {
     return tasks.filter(task => {
@@ -69,9 +81,17 @@ export const TasksPage: React.FC = () => {
         (selectedProject === "independent" && !task.projectId) ||
         task.projectId === selectedProject
 
-      return matchSearch && matchStatus && matchPriority && matchProject
+      // Calendar date filter: matches deadline date, scheduled start date, completed date, or creation date
+      const matchDate = !selectedDate || Boolean(
+        (task.deadline && (task.deadline.startsWith(selectedDate) || task.deadline.includes(selectedDate))) ||
+        (task.startDate && (task.startDate.startsWith(selectedDate) || task.startDate.includes(selectedDate))) ||
+        (task.completedAt && (task.completedAt.startsWith(selectedDate) || task.completedAt.includes(selectedDate))) ||
+        (task.createdAt && (task.createdAt.startsWith(selectedDate) || task.createdAt.includes(selectedDate)))
+      )
+
+      return matchSearch && matchStatus && matchPriority && matchProject && matchDate
     })
-  }, [tasks, searchTerm, selectedStatus, selectedPriority, selectedProject])
+  }, [tasks, searchTerm, selectedStatus, selectedPriority, selectedProject, selectedDate])
 
   // Pagination calculations
   const totalPages = Math.max(1, Math.ceil(filteredTasks.length / pageSize))
@@ -138,6 +158,44 @@ export const TasksPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Calendar Date Picker Filter */}
+          <div className="relative flex items-center">
+            <Calendar className="w-3.5 h-3.5 text-indigo-500 absolute left-2.5 pointer-events-none" />
+            <Input
+              type="date"
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+              className="pl-8 pr-7 h-9 text-xs w-36 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 cursor-pointer font-mono"
+              title="Pick a date from calendar to view tasks"
+            />
+            {selectedDate && (
+              <button
+                type="button"
+                onClick={() => setSelectedDate("")}
+                className="absolute right-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold leading-none p-0.5"
+                title="Clear date filter"
+              >
+                &times;
+              </button>
+            )}
+          </div>
+
+          {/* Quick "Today" date shortcut */}
+          <Button
+            type="button"
+            variant={selectedDate === todayStr ? "default" : "outline"}
+            size="sm"
+            onClick={() => setSelectedDate(selectedDate === todayStr ? "" : todayStr)}
+            className={`h-9 px-2.5 text-xs font-medium gap-1 ${
+              selectedDate === todayStr
+                ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                : "text-slate-600 dark:text-slate-300"
+            }`}
+            title="Toggle filter for today's tasks"
+          >
+            Today
+          </Button>
+
           <div className="w-36">
             <Select value={selectedStatus} onValueChange={setSelectedStatus}>
               <SelectTrigger className="h-9 text-xs">
@@ -187,6 +245,29 @@ export const TasksPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Active Calendar Date Filter Banner */}
+      {selectedDate && (
+        <div className="flex items-center justify-between p-3 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-900 dark:text-indigo-200">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Calendar className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span>
+              Showing tasks scheduled or active on: <strong className="font-mono bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">{selectedDate}</strong>
+              {selectedDate === todayStr ? " (Today)" : ""} &bull; Found <strong>{filteredTasks.length}</strong> task{filteredTasks.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setSelectedDate("")}
+            className="h-7 px-2 text-xs text-indigo-700 dark:text-indigo-300 hover:text-rose-600 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 gap-1"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>Clear Date Filter</span>
+          </Button>
+        </div>
+      )}
+
       {/* Tasks Table */}
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
@@ -205,8 +286,24 @@ export const TasksPage: React.FC = () => {
             <TableBody>
               {filteredTasks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-10 text-xs text-slate-500">
-                    No tasks found matching current filters.
+                  <TableCell colSpan={7} className="text-center py-12 text-xs text-slate-500">
+                    <div className="space-y-2">
+                      <p className="font-semibold text-slate-700 dark:text-slate-300">
+                        {selectedDate
+                          ? `No tasks found scheduled or active on ${selectedDate}.`
+                          : "No tasks found matching current filters."}
+                      </p>
+                      {selectedDate && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedDate("")}
+                          className="h-7 text-xs text-indigo-600 border-indigo-200 dark:text-indigo-400 dark:border-indigo-800"
+                        >
+                          View All Dates
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ) : (

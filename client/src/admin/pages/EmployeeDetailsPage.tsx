@@ -54,7 +54,12 @@ export const EmployeeDetailsPage: React.FC = () => {
   const [isCommentOpen, setIsCommentOpen] = useState(false)
   const [isUpdatePasswordOpen, setIsUpdatePasswordOpen] = useState(false)
 
-  const employee = employees.find(e => e.id === employeeId)
+  const cleanParamId = employeeId ? decodeURIComponent(employeeId).trim().toLowerCase().replace(/[\s-_]+/g, "") : ""
+  const employee = employees.find(e => {
+    const normId = (e.id || "").toLowerCase().replace(/[\s-_]+/g, "")
+    const normCode = (e.employeeId || "").toLowerCase().replace(/[\s-_]+/g, "")
+    return normId === cleanParamId || normCode === cleanParamId || e.id === employeeId || e.employeeId === employeeId
+  })
 
   if (!employee) {
     return (
@@ -81,9 +86,10 @@ export const EmployeeDetailsPage: React.FC = () => {
   const [backendReports, setBackendReports] = useState<any[]>([])
 
   const fetchBackendReports = useCallback(async () => {
-    if (!employeeId) return
+    const targetId = employee?.id || employee?.employeeId || employeeId
+    if (!targetId) return
     try {
-      const res = await api.reports.getEod({ employeeId, limit: "100" })
+      const res = await api.reports.getEod({ employeeId: targetId, limit: "100" })
       if (res && res.success && Array.isArray(res.reports)) {
         const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
         const mapped = res.reports.map((row: any) => {
@@ -102,10 +108,10 @@ export const EmployeeDetailsPage: React.FC = () => {
             id: row.id,
             date: typeof row.date === "string" ? row.date.slice(0, 10) : new Date(row.date).toISOString().slice(0, 10),
             dayOfWeek,
-            checkIn: "09:00 AM",
-            checkOut: "06:00 PM",
+            checkIn: row.check_in_time ? new Date(row.check_in_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "09:00 AM",
+            checkOut: row.check_out_time ? new Date(row.check_out_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : (row.punch_out ? new Date(row.punch_out).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "06:00 PM"),
             breakDuration: "45m",
-            hoursLogged: `${row.hours_worked || 8}h 00m`,
+            hoursLogged: `${Number(row.hours_worked || 8).toFixed(1)}h`,
             hoursWorked: Number(row.hours_worked) || 8,
             tasksTotal: completedTasksList.length,
             tasksCompleted: completedTasksList.length,
@@ -128,7 +134,7 @@ export const EmployeeDetailsPage: React.FC = () => {
     } catch (err: any) {
       console.warn("Backend reports fetch notice:", err.message)
     }
-  }, [employeeId])
+  }, [employee, employeeId])
 
   useEffect(() => {
     fetchBackendReports()
@@ -163,13 +169,20 @@ export const EmployeeDetailsPage: React.FC = () => {
 
   const filteredEmployeeReports = useMemo(() => {
     return effectiveReports.filter((rep: any) => {
+      if (selectedMonthKey) {
+        const isIsoMatch = typeof rep.date === "string" && rep.date.startsWith(selectedMonthKey)
+        const isMonthNameMatch = typeof rep.date === "string" && (rep.date.includes(monthName) || rep.date.includes(monthName.slice(0, 3)))
+        if (!isIsoMatch && !isMonthNameMatch) {
+          return false
+        }
+      }
       if (reportSearchQuery.trim()) {
         const q = reportSearchQuery.toLowerCase()
         const matchDate =
           rep.date.toLowerCase().includes(q) ||
           (rep.dayOfWeek && rep.dayOfWeek.toLowerCase().includes(q))
-        const matchSummary = rep.summary.toLowerCase().includes(q)
-        const matchTasks = rep.completedTasks.some(
+        const matchSummary = (rep.summary || "").toLowerCase().includes(q)
+        const matchTasks = (rep.completedTasks || []).some(
           (t: any) =>
             t.title.toLowerCase().includes(q) ||
             t.id.toLowerCase().includes(q) ||
@@ -179,7 +192,17 @@ export const EmployeeDetailsPage: React.FC = () => {
       }
       return true
     })
-  }, [effectiveReports, reportSearchQuery])
+  }, [effectiveReports, selectedMonthKey, monthName, reportSearchQuery])
+
+  const employeePickerDays = useMemo(() => {
+    const dates = new Set(filteredEmployeeReports.map((r: any) => r.date))
+    return dates.size || currentMonthData.summary.daysPresent
+  }, [filteredEmployeeReports, currentMonthData.summary.daysPresent])
+
+  const employeePickerTasks = useMemo(() => {
+    const total = filteredEmployeeReports.reduce((acc: number, r: any) => acc + (r.completedTasks?.length || 0), 0)
+    return total || currentMonthData.summary.tasksCompleted
+  }, [filteredEmployeeReports, currentMonthData.summary.tasksCompleted])
 
   // Pagination for employee reports
   const totalReportPages = Math.max(1, Math.ceil(filteredEmployeeReports.length / reportPageSize))
@@ -577,6 +600,12 @@ export const EmployeeDetailsPage: React.FC = () => {
                 selectedMonthKey={selectedMonthKey}
                 onMonthChange={setSelectedMonthKey}
                 variant="compact"
+                monthStats={{
+                  [selectedMonthKey]: {
+                    daysCount: employeePickerDays,
+                    taskCount: employeePickerTasks,
+                  },
+                }}
               />
 
               <DownloadMonthlyEodButton

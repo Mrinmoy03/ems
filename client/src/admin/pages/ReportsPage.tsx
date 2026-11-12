@@ -52,8 +52,10 @@ export const ReportsPage: React.FC = () => {
       if (res && res.success && Array.isArray(res.reports)) {
         const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
         const mapped = res.reports.map((row: any) => {
-          const d = new Date(row.date)
-          const dayOfWeek = daysOfWeek[d.getDay()] || "Monday"
+          const dateStr = typeof row.date === "string" ? row.date.split("T")[0] : new Date(row.date).toISOString().split("T")[0]
+          const [yr, mo, da] = dateStr.split("-").map(Number)
+          const dateObj = yr && mo && da ? new Date(yr, mo - 1, da) : new Date(row.date)
+          const dayOfWeek = daysOfWeek[dateObj.getDay()] || "Monday"
           const taskLines = (row.tasks_completed || "").split("\n").filter(Boolean)
           const completedTasksList = taskLines.map((t: string, i: number) => ({
             id: `tsk-${row.id}-${i + 1}`,
@@ -63,6 +65,13 @@ export const ReportsPage: React.FC = () => {
             isLate: false,
           }))
 
+          const checkInFormatted = row.check_in_time
+            ? new Date(row.check_in_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : "—"
+          const checkOutFormatted = row.check_out_time
+            ? new Date(row.check_out_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : (row.punch_out ? new Date(row.punch_out).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—")
+
           return {
             id: row.id,
             employeeId: row.emp_code || row.employee_id,
@@ -70,18 +79,18 @@ export const ReportsPage: React.FC = () => {
             employeeAvatar: row.avatar_url || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80`,
             employeeDepartment: row.department_name || "General",
             employeeDesignation: row.designation || "Staff",
-            date: typeof row.date === "string" ? row.date.slice(0, 10) : new Date(row.date).toISOString().slice(0, 10),
+            date: dateStr,
             dayOfWeek,
-            checkIn: "09:00 AM",
-            checkOut: "06:00 PM",
-            breakDuration: "45m",
-            hoursLogged: `${row.hours_worked || 8}h 00m`,
+            checkIn: checkInFormatted,
+            checkOut: checkOutFormatted,
+            breakDuration: "0m",
+            hoursLogged: `${Number(row.hours_worked || 8).toFixed(1)}h`,
             hoursWorked: Number(row.hours_worked) || 8,
             tasksTotal: completedTasksList.length,
             tasksCompleted: completedTasksList.length,
             tasksPending: 0,
             completedTasks: completedTasksList,
-            inProgressTasks: row.next_day_plan ? [{
+            inProgressTasks: row.next_day_plan && row.next_day_plan.trim() ? [{
               id: `plan-${row.id}`,
               title: row.next_day_plan,
               category: "Next Shift Plan",
@@ -90,7 +99,7 @@ export const ReportsPage: React.FC = () => {
               notes: row.challenges ? `Challenges noted: ${row.challenges}` : undefined,
             }] : [],
             summary: row.summary,
-            submittedAt: row.created_at ? new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "06:00 PM",
+            submittedAt: row.created_at ? new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—",
           }
         })
         setBackendReports(mapped)
@@ -152,9 +161,22 @@ export const ReportsPage: React.FC = () => {
   // Filter reports
   const filteredReports = useMemo(() => {
     return enrichedReports.filter(rep => {
+      // Month filter
+      if (selectedMonthKey) {
+        const isIsoMatch = typeof rep.date === "string" && rep.date.startsWith(selectedMonthKey)
+        const isMonthNameMatch = typeof rep.date === "string" && (rep.date.includes(monthName) || rep.date.includes(monthName.slice(0, 3)))
+        if (!isIsoMatch && !isMonthNameMatch) {
+          return false
+        }
+      }
+
       // Employee filter
-      if (selectedEmployeeId !== "all" && rep.employeeId !== selectedEmployeeId) {
-        return false
+      if (selectedEmployeeId !== "all") {
+        const cleanSelected = selectedEmployeeId.toLowerCase().replace(/[\s-_]+/g, "")
+        const cleanEmpId = (rep.employeeId || "").toLowerCase().replace(/[\s-_]+/g, "")
+        if (cleanEmpId !== cleanSelected && rep.employeeId !== selectedEmployeeId) {
+          return false
+        }
       }
 
       // Department filter
@@ -168,11 +190,11 @@ export const ReportsPage: React.FC = () => {
         const matchDate =
           rep.date.toLowerCase().includes(q) ||
           (rep.dayOfWeek && rep.dayOfWeek.toLowerCase().includes(q))
-        const matchSummary = rep.summary.toLowerCase().includes(q)
+        const matchSummary = (rep.summary || "").toLowerCase().includes(q)
         const matchEmp =
-          rep.employeeName.toLowerCase().includes(q) ||
-          rep.employeeId.toLowerCase().includes(q)
-        const matchTasks = rep.completedTasks.some(
+          (rep.employeeName || "").toLowerCase().includes(q) ||
+          (rep.employeeId || "").toLowerCase().includes(q)
+        const matchTasks = (rep.completedTasks || []).some(
           (t: any) =>
             t.title.toLowerCase().includes(q) ||
             t.id.toLowerCase().includes(q) ||
@@ -184,7 +206,7 @@ export const ReportsPage: React.FC = () => {
 
       return true
     })
-  }, [enrichedReports, selectedEmployeeId, selectedDept, searchQuery])
+  }, [enrichedReports, selectedMonthKey, monthName, selectedEmployeeId, selectedDept, searchQuery])
 
   // Pagination calculations
   const totalPages = Math.max(1, Math.ceil(filteredReports.length / pageSize))
@@ -193,6 +215,45 @@ export const ReportsPage: React.FC = () => {
     const startIndex = (safeCurrentPage - 1) * pageSize
     return filteredReports.slice(startIndex, startIndex + pageSize)
   }, [filteredReports, safeCurrentPage, pageSize])
+
+  // Dynamic metrics derived directly from real filteredReports for the selected period
+  const dynamicDaysPresent = useMemo(() => {
+    if (filteredReports.length > 0) {
+      const dates = new Set(filteredReports.map(r => r.date))
+      return dates.size
+    }
+    return summary.daysPresent
+  }, [filteredReports, summary.daysPresent])
+
+  const dynamicTotalHours = useMemo(() => {
+    if (filteredReports.length > 0) {
+      return filteredReports.reduce((acc, r) => acc + (Number(r.hoursWorked) || 0), 0)
+    }
+    return summary.totalHoursWorked
+  }, [filteredReports, summary.totalHoursWorked])
+
+  const dynamicTasksCompleted = useMemo(() => {
+    if (filteredReports.length > 0) {
+      return filteredReports.reduce((acc, r) => acc + (r.completedTasks?.length || r.tasksCompleted || 0), 0)
+    }
+    return summary.tasksCompleted
+  }, [filteredReports, summary.tasksCompleted])
+
+  const dynamicCompletionRate = useMemo(() => {
+    return dynamicTasksCompleted > 0 ? 100 : summary.completionRate
+  }, [dynamicTasksCompleted, summary.completionRate])
+
+  // Dynamic month stats to pass to YearMonthPicker
+  const monthStats = useMemo(() => {
+    const dates = new Set(filteredReports.map(r => r.date))
+    const totalTasks = filteredReports.reduce((acc, r) => acc + (r.completedTasks?.length || r.tasksCompleted || 0), 0)
+    return {
+      [selectedMonthKey]: {
+        daysCount: dates.size || summary.daysPresent,
+        taskCount: totalTasks || summary.tasksCompleted,
+      },
+    }
+  }, [filteredReports, selectedMonthKey, summary.daysPresent, summary.tasksCompleted])
 
   // Expanded card tracking - default expand first item
   const [expandedCardIds, setExpandedCardIds] = useState<Set<string>>(
@@ -299,7 +360,7 @@ export const ReportsPage: React.FC = () => {
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
           </div>
           <p className="text-xl font-bold text-slate-900 dark:text-slate-100">
-            {summary.daysPresent} Shifts
+            {dynamicDaysPresent} Shifts
           </p>
           <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Recorded attendance</p>
         </div>
@@ -310,7 +371,7 @@ export const ReportsPage: React.FC = () => {
             <Clock className="w-3.5 h-3.5 text-blue-500" />
           </div>
           <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400">
-            {summary.totalHoursWorked.toFixed(1)}h
+            {dynamicTotalHours.toFixed(1)}h
           </p>
           <p className="text-[11px] text-slate-400">Total shift time</p>
         </div>
@@ -321,7 +382,7 @@ export const ReportsPage: React.FC = () => {
             <Briefcase className="w-3.5 h-3.5 text-purple-500" />
           </div>
           <p className="text-xl font-bold text-slate-900 dark:text-slate-100">
-            {summary.tasksCompleted}
+            {dynamicTasksCompleted}
           </p>
           <p className="text-[11px] text-slate-400">Deliverables finished</p>
         </div>
@@ -330,11 +391,11 @@ export const ReportsPage: React.FC = () => {
           <div className="flex items-center justify-between text-xs text-slate-500">
             <span>Completion Rate</span>
             <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[10px]">
-              {summary.completionRate}%
+              {dynamicCompletionRate}%
             </Badge>
           </div>
           <p className="text-xl font-bold text-slate-900 dark:text-slate-100">
-            {summary.completionRate}%
+            {dynamicCompletionRate}%
           </p>
           <p className="text-[11px] text-slate-400">Milestone velocity</p>
         </div>
@@ -365,6 +426,7 @@ export const ReportsPage: React.FC = () => {
             <YearMonthPicker
               selectedMonthKey={selectedMonthKey}
               onMonthChange={setSelectedMonthKey}
+              monthStats={monthStats}
               variant="compact"
             />
           </div>

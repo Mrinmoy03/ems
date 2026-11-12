@@ -26,6 +26,7 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (emailOrId: string, password: string) => Promise<{ success: boolean; role?: UserRole; error?: string }>;
   logout: () => void;
+  updateUser: (updates: Partial<UserProfile>) => void;
   registerProvisionedEmployee: (emp: { email: string; employeeId: string; password: string; name: string; phone?: string; department?: string; designation?: string }) => void;
 }
 
@@ -267,6 +268,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     toast.info("Logged out from WorkTrack Enterprise Management.");
   }, []);
 
+  const updateUser = useCallback((updates: Partial<UserProfile>) => {
+    setUser(prev => {
+      if (!prev) return null;
+      const updated = { ...prev, ...updates };
+      try {
+        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -277,6 +289,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         login,
         logout,
+        updateUser,
         registerProvisionedEmployee,
       }}
     >

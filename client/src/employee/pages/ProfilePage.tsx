@@ -33,6 +33,7 @@ import {
 export const ProfilePage: React.FC = () => {
   const { employee, updateEmployeeAvatar } = useEmployee()
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [newAvatarUrl, setNewAvatarUrl] = useState(employee.avatarUrl)
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
@@ -67,8 +68,40 @@ export const ProfilePage: React.FC = () => {
     const reader = new FileReader()
     reader.onload = (e) => {
       if (typeof e.target?.result === "string") {
-        setNewAvatarUrl(e.target.result)
-        setUploadedFileName(file.name)
+        const rawDataUrl = e.target.result
+        const img = new Image()
+        img.onload = () => {
+          const maxDim = 500
+          let width = img.width
+          let height = img.height
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width)
+              width = maxDim
+            } else {
+              width = Math.round((width * maxDim) / height)
+              height = maxDim
+            }
+          }
+          const canvas = document.createElement("canvas")
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext("2d")
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height)
+            const compressed = canvas.toDataURL("image/jpeg", 0.85)
+            setNewAvatarUrl(compressed)
+          } else {
+            setNewAvatarUrl(rawDataDataUrl())
+          }
+          setUploadedFileName(file.name)
+        }
+        img.onerror = () => {
+          setNewAvatarUrl(rawDataUrl)
+          setUploadedFileName(file.name)
+        }
+        const rawDataDataUrl = () => rawDataUrl
+        img.src = rawDataUrl
       }
     }
     reader.onerror = () => {
@@ -103,10 +136,14 @@ export const ProfilePage: React.FC = () => {
     }
   }
 
-  const handleSaveAvatar = () => {
+  const handleSaveAvatar = async () => {
     if (newAvatarUrl.trim()) {
-      updateEmployeeAvatar(newAvatarUrl.trim())
-      setIsAvatarModalOpen(false)
+      setIsSaving(true)
+      const success = await updateEmployeeAvatar(newAvatarUrl.trim())
+      setIsSaving(false)
+      if (success !== false) {
+        setIsAvatarModalOpen(false)
+      }
     }
   }
 
@@ -404,11 +441,11 @@ export const ProfilePage: React.FC = () => {
               type="button"
               size="sm"
               onClick={handleSaveAvatar}
-              disabled={!newAvatarUrl.trim()}
+              disabled={!newAvatarUrl.trim() || isSaving}
               className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
             >
               <Check className="h-3.5 w-3.5" />
-              Save Photo
+              {isSaving ? "Saving..." : "Save Photo"}
             </Button>
           </DialogFooter>
         </DialogContent>

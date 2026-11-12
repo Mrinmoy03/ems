@@ -18,14 +18,13 @@ import {
 } from "lucide-react"
 import { format } from "date-fns"
 import { getCurrentMonthKey, getMonthData } from "../data/mockReports"
-import { formatStandardDate } from "../utils/date"
 import { YearMonthPicker } from "../components/YearMonthPicker"
 import { WorkingDaysModal } from "../components/WorkingDaysModal"
 import { DataPagination } from "@/components/common/DataPagination"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
-import { isTaskCompletedLate } from "../utils/taskStatus"
+import { isTaskCompletedLate, getTodayDateString } from "../utils/taskStatus"
 
 type TimesheetPeriodType = "weekly" | string
 
@@ -41,10 +40,16 @@ export const TimesheetPage: React.FC = () => {
   const [pageSize, setPageSize] = useState(10)
   const [isWorkingDaysModalOpen, setIsWorkingDaysModalOpen] = useState(false)
 
-  // Live completed tasks from EmployeeContext
-  const liveCompletedTasks = useMemo(() => {
+  const todayStr = useMemo(() => getTodayDateString(), [])
+
+  // Live tasks completed TODAY specifically
+  const todayCompletedTasks = useMemo(() => {
     return tasks
-      .filter(t => t.progress === 100 || t.status === "completed")
+      .filter(
+        t =>
+          (t.progress === 100 || t.status === "completed") &&
+          (t.completedAt?.startsWith(todayStr) || t.updatedAt?.startsWith(todayStr))
+      )
       .map(t => ({
         id: t.id,
         title: t.title,
@@ -52,31 +57,53 @@ export const TimesheetPage: React.FC = () => {
         isCompletedLate: isTaskCompletedLate(t),
         delayReason: t.comment,
       }))
-  }, [tasks])
+  }, [tasks, todayStr])
 
   // Reset pagination on view change or search
   React.useEffect(() => {
     setCurrentPage(1)
   }, [activePeriod, searchQuery])
 
-  // Current live weekly records
+  // Current live weekly records combining today's active session with other attended shifts this week
   const weeklyLog = useMemo(() => {
     const today = new Date()
-    return [
-      {
-        id: "shift-today",
-        date: format(today, "MMM d (Today)"),
-        dayOfWeek: format(today, "EEEE"),
-        inTime: sessionState !== "not-started" ? format(new Date(loginTime), "hh:mm a") : "—",
-        outTime: sessionState === "logged-out" ? (logoutTime ? format(new Date(logoutTime), "hh:mm a") : "—") : "Active Session",
-        breakDuration: `${breaks.length * 45 || 0} mins`,
-        totalHours: formatDurationToHuman(elapsedSeconds),
-        status: sessionState === "logged-out" ? "Completed" : "In Progress",
-        tasksCompletedCount: liveCompletedTasks.length,
-        completedTasks: liveCompletedTasks,
-      },
-    ]
-  }, [breaks.length, elapsedSeconds, loginTime, logoutTime, sessionState, liveCompletedTasks])
+    const liveBreakMins = Math.round(breaks.reduce((acc, b) => acc + (b.durationSeconds || 0), 0) / 60)
+    const todayDurationHuman = formatDurationToHuman(elapsedSeconds)
+
+    const todayShift = {
+      id: "shift-today",
+      date: `${format(today, "MMM d")} (Today)`,
+      dayOfWeek: format(today, "EEEE"),
+      inTime: sessionState !== "not-started" ? format(new Date(loginTime), "hh:mm a") : "—",
+      outTime: sessionState === "logged-out" ? (logoutTime ? format(new Date(logoutTime), "hh:mm a") : "—") : "Active Session",
+      breakDuration: `${liveBreakMins} mins`,
+      totalHours: todayDurationHuman,
+      status: sessionState === "logged-out" ? "Completed" : "In Progress",
+      tasksCompletedCount: todayCompletedTasks.length,
+      completedTasks: todayCompletedTasks,
+      numericHours: Number((elapsedSeconds / 3600).toFixed(2)),
+    }
+
+    // Historical attended working days from this month that occurred during this active week
+    const currentMonthWorkingDays = getMonthData(getCurrentMonthKey()).workingDays || []
+    const otherShiftsThisWeek = currentMonthWorkingDays
+      .filter(d => !d.date.includes(format(today, "MMM d")) && !d.date.includes(todayStr))
+      .map(day => ({
+        id: `shift-${day.date}`,
+        date: day.date,
+        dayOfWeek: day.dayOfWeek,
+        inTime: day.checkIn,
+        outTime: day.checkOut,
+        breakDuration: day.breakDuration || "0 mins",
+        totalHours: day.hoursFormatted,
+        status: "Completed",
+        tasksCompletedCount: day.tasksCompletedCount,
+        completedTasks: day.completedTasks,
+        numericHours: day.hoursLogged,
+      }))
+
+    return [todayShift, ...otherShiftsThisWeek]
+  }, [breaks, elapsedSeconds, loginTime, logoutTime, sessionState, todayCompletedTasks, todayStr])
 
   // Get active items based on period
   const activeItems = useMemo(() => {
@@ -102,15 +129,15 @@ export const TimesheetPage: React.FC = () => {
       if (activePeriod === activeKey && idx === 0) {
         return {
           id: `shift-month-0`,
-          date: formatStandardDate(new Date()),
+          date: `${format(new Date(), "MMM d")} (Today)`,
           dayOfWeek: format(new Date(), "EEEE"),
           inTime: format(new Date(loginTime), "hh:mm a"),
-          outTime: sessionState === "logged-out" ? (logoutTime ? format(new Date(logoutTime), "hh:mm a") : "05:00 PM") : "Active Session",
-          breakDuration: `${breaks.length * 45 || 0} mins`,
+          outTime: sessionState === "logged-out" ? (logoutTime ? format(new Date(logoutTime), "hh:mm a") : "—") : "Active Session",
+          breakDuration: `${Math.round(breaks.reduce((acc, b) => acc + (b.durationSeconds || 0), 0) / 60)} mins`,
           totalHours: formatDurationToHuman(elapsedSeconds),
           status: sessionState === "logged-out" ? "Completed" : "In Progress",
-          tasksCompletedCount: liveCompletedTasks.length,
-          completedTasks: liveCompletedTasks,
+          tasksCompletedCount: todayCompletedTasks.length,
+          completedTasks: todayCompletedTasks,
         }
       }
       return {
@@ -119,14 +146,14 @@ export const TimesheetPage: React.FC = () => {
         dayOfWeek: day.dayOfWeek,
         inTime: day.checkIn,
         outTime: day.checkOut,
-        breakDuration: day.breakDuration || "45 mins",
+        breakDuration: day.breakDuration || "0 mins",
         totalHours: day.hoursFormatted,
         status: "Completed",
         tasksCompletedCount: day.tasksCompletedCount,
         completedTasks: day.completedTasks,
       }
     })
-  }, [activePeriod, weeklyLog, loginTime, logoutTime, sessionState, breaks.length, elapsedSeconds, liveCompletedTasks])
+  }, [activePeriod, weeklyLog, loginTime, logoutTime, sessionState, breaks, elapsedSeconds, todayCompletedTasks])
 
   // Filter items by search
   const filteredItems = useMemo(() => {
@@ -150,28 +177,53 @@ export const TimesheetPage: React.FC = () => {
     return filteredItems.slice(startIndex, startIndex + pageSize)
   }, [filteredItems, safeCurrentPage, pageSize])
 
-  // Active Period Metrics
+  // Active Period Metrics - calculated dynamically from real shift logs
   const activeMetrics = useMemo(() => {
     if (activePeriod === "weekly") {
+      const totalH = weeklyLog.reduce((acc, s) => acc + (s.numericHours || 0), 0)
+      const tasksC = weeklyLog.reduce((acc, s) => acc + (s.tasksCompletedCount || s.completedTasks?.length || 0), 0)
+      const avg = weeklyLog.length > 0 ? (totalH / weeklyLog.length).toFixed(1) : "0.0"
       return {
         title: "Active Work Week (Monday – Saturday)",
-        totalHours: "47.5h",
-        daysPresent: "6 / 6",
-        avgHours: "7.9h",
-        tasksCount: 20,
-        statusNote: "+1.5h vs 48h weekly target",
+        totalHours: `${totalH.toFixed(1)}h`,
+        daysPresent: `${weeklyLog.length} / 6`,
+        avgHours: `${avg}h`,
+        tasksCount: tasksC,
+        statusNote: `${totalH >= 48 ? "+" : ""}${(totalH - 48).toFixed(1)}h vs 48h weekly target`,
       }
     }
     const mData = getMonthData(activePeriod)
+    const activeKey = getCurrentMonthKey()
+    const isCurrent = activePeriod === activeKey
+    const totalWorkingDays = mData.summary.workingDays || 26
+    const shiftsCount = isCurrent ? Math.max(mData.workingDays.length, weeklyLog.length) : (mData.summary.daysPresent || 0)
+    const hours = isCurrent
+      ? Number((weeklyLog.reduce((acc, s) => acc + (s.numericHours || 0), 0)).toFixed(1))
+      : mData.summary.totalHoursWorked
+    const tasksC = isCurrent
+      ? weeklyLog.reduce((acc, s) => acc + (s.tasksCompletedCount || s.completedTasks?.length || 0), 0)
+      : mData.summary.tasksCompleted
+    const avgH = shiftsCount > 0 ? (hours / shiftsCount).toFixed(1) : "0.0"
+
     return {
       title: `${mData.monthName} ${mData.year} Monthly Total`,
-      totalHours: `${mData.summary.totalHoursWorked}h`,
-      daysPresent: `${mData.summary.daysPresent} / ${mData.summary.workingDays}`,
-      avgHours: `${(mData.summary.totalHoursWorked / (mData.summary.daysPresent || 1)).toFixed(1)}h`,
-      tasksCount: mData.summary.tasksCompleted,
+      totalHours: `${hours}h`,
+      daysPresent: `${shiftsCount} / ${totalWorkingDays}`,
+      avgHours: `${avgH}h`,
+      tasksCount: tasksC,
       statusNote: `${mData.summary.completionRate}% tasks delivery rate`,
     }
-  }, [activePeriod])
+  }, [activePeriod, weeklyLog])
+
+  const timesheetMonthStats = useMemo(() => {
+    const totalTasks = weeklyLog.reduce((acc, s) => acc + (s.tasksCompletedCount || s.completedTasks?.length || 0), 0)
+    return {
+      [selectedMonthKey]: {
+        daysCount: Math.max(weeklyLog.length, 2),
+        taskCount: totalTasks || 1,
+      },
+    }
+  }, [selectedMonthKey, weeklyLog])
 
   const handleExportTimesheet = () => {
     const mData = getMonthData(activePeriod)
@@ -202,6 +254,7 @@ export const TimesheetPage: React.FC = () => {
             isWeeklySelected={activePeriod === "weekly"}
             onSelectWeekly={() => setActivePeriod("weekly")}
             selectedMonthKey={activePeriod === "weekly" ? selectedMonthKey : activePeriod}
+            monthStats={timesheetMonthStats}
             onMonthChange={(mKey) => {
               setSelectedMonthKey(mKey)
               setActivePeriod(mKey)
@@ -295,6 +348,7 @@ export const TimesheetPage: React.FC = () => {
                   isWeeklySelected={activePeriod === "weekly"}
                   onSelectWeekly={() => setActivePeriod("weekly")}
                   selectedMonthKey={activePeriod === "weekly" ? selectedMonthKey : activePeriod}
+                  monthStats={timesheetMonthStats}
                   onMonthChange={(mKey) => {
                     setSelectedMonthKey(mKey)
                     setActivePeriod(mKey)

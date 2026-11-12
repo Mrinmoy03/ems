@@ -192,7 +192,7 @@ export const WorkingDaysModal: React.FC<WorkingDaysModalProps> = ({
                 {summary.totalHoursWorked}h
               </span>
               <span className="text-[10px] text-indigo-600 dark:text-indigo-400 block mt-0.5">
-                Avg {(summary.totalHoursWorked / summary.daysPresent).toFixed(1)}h/day
+                Avg {summary.daysPresent > 0 ? (summary.totalHoursWorked / summary.daysPresent).toFixed(1) : "0.0"}h/day
               </span>
             </div>
 

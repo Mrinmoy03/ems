@@ -6,6 +6,7 @@ export type EmployeeAccountStatus = "active" | "inactive" | "deactivated"
 export type TodayAttendanceStatus = "working" | "on-break" | "logged-out" | "present" | "absent" | "on-leave"
 
 export interface AdminEmployee extends EmployeeProfile {
+  employeeId?: string
   name: string
   avatar: string
   departmentId?: string

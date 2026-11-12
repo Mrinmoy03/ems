@@ -71,19 +71,37 @@ export const AdminDashboardPage: React.FC = () => {
       return days.map(day => ({ day, present: 0, absent: 0 }))
     }
 
-    const nowDay = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()]
-    return days.map(day => {
+    const now = new Date()
+    const currentDay = now.getDay() // 0 = Sun, 1 = Mon, ..., 6 = Sat
+    const distToMon = currentDay === 0 ? -6 : 1 - currentDay
+    const monday = new Date(now)
+    monday.setDate(now.getDate() + distToMon)
+
+    const weekDays = days.map((dayLabel, idx) => {
+      const d = new Date(monday)
+      d.setDate(monday.getDate() + idx)
+      const yr = d.getFullYear()
+      const mo = String(d.getMonth() + 1).padStart(2, "0")
+      const da = String(d.getDate()).padStart(2, "0")
+      return {
+        day: dayLabel,
+        dateStr: `${yr}-${mo}-${da}`,
+      }
+    })
+
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
+
+    return weekDays.map(({ day, dateStr }) => {
       const dayMatches = attendance.filter((a: any) => {
-        const d = new Date(a.date)
-        const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()]
-        return dayName === day
+        const aDate = typeof a.date === "string" ? a.date.split("T")[0] : ""
+        return aDate === dateStr
       })
       const presentCount = dayMatches.filter(
         (a: any) => a.status === "working" || a.status === "logged-out" || a.status === "on-break" || a.status === "present"
       ).length
       const absentCount = dayMatches.filter((a: any) => a.status === "absent" || a.status === "on-leave").length
 
-      if (dayMatches.length === 0 && day === nowDay) {
+      if (dayMatches.length === 0 && dateStr === todayStr) {
         return {
           day,
           present: kpis.presentToday,

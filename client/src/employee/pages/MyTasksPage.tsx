@@ -7,7 +7,7 @@ import { CheckSquare, AlertTriangle, Clock, Layers, History, ListTodo } from "lu
 import { cn } from "@/lib/utils"
 
 export const MyTasksPage: React.FC = () => {
-  const { taskCounts } = useEmployee()
+  const { todayTaskCounts } = useEmployee()
   const [activeTab, setActiveTab] = useState<"tasks" | "history">("tasks")
 
   return (
@@ -37,7 +37,7 @@ export const MyTasksPage: React.FC = () => {
             <ListTodo className="h-4 w-4" />
             <span>Active Tasks</span>
             <span className="text-[10px] bg-slate-200/80 dark:bg-slate-800 px-1.5 py-0.2 rounded-full font-mono">
-              {taskCounts.all}
+              {todayTaskCounts.all}
             </span>
           </button>
 
@@ -68,7 +68,7 @@ export const MyTasksPage: React.FC = () => {
             </div>
             <div>
               <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 uppercase">Assigned</p>
-              <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{taskCounts.all}</p>
+              <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{todayTaskCounts.all}</p>
             </div>
           </CardContent>
         </Card>
@@ -80,7 +80,7 @@ export const MyTasksPage: React.FC = () => {
             </div>
             <div>
               <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 uppercase">In Progress</p>
-              <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{taskCounts.inProgress}</p>
+              <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{todayTaskCounts.inProgress}</p>
             </div>
           </CardContent>
         </Card>
@@ -92,7 +92,7 @@ export const MyTasksPage: React.FC = () => {
             </div>
             <div>
               <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 uppercase">Completed</p>
-              <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{taskCounts.completed}</p>
+              <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{todayTaskCounts.completed}</p>
             </div>
           </CardContent>
         </Card>
@@ -104,7 +104,7 @@ export const MyTasksPage: React.FC = () => {
             </div>
             <div>
               <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 uppercase">Overdue</p>
-              <p className="text-xl font-bold text-red-600 dark:text-red-400">{taskCounts.overdue}</p>
+              <p className="text-xl font-bold text-red-600 dark:text-red-400">{todayTaskCounts.overdue}</p>
             </div>
           </CardContent>
         </Card>

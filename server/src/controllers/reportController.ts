@@ -5,30 +5,168 @@ import { createNotificationInternal } from "./notificationController";
 
 const generateId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
 
+export const syncAttendanceToEodReports = async (targetEmpId?: string): Promise<void> => {
+  try {
+    let attQuery = `
+      SELECT a.id as attendance_id,
+             a.employee_id,
+             CAST(a.date AS CHAR) as shift_date,
+             a.punch_in,
+             a.punch_out,
+             a.total_duration_seconds,
+             e.first_name,
+             e.last_name,
+             e.employee_id as emp_code
+      FROM attendance a
+      JOIN employees e ON a.employee_id = e.id
+      WHERE a.punch_in IS NOT NULL
+        AND (a.punch_out IS NOT NULL OR a.date < CURDATE())
+    `;
+    const params: any[] = [];
+    if (targetEmpId) {
+      const cleanEmp = String(targetEmpId).trim();
+      const dashedEmp = cleanEmp.replace(/\s+/g, "-");
+      const spacedEmp = cleanEmp.replace(/-/g, " ");
+      attQuery += ` AND (
+        a.employee_id IN (?, ?, ?) OR 
+        e.employee_id IN (?, ?, ?) OR 
+        e.user_id IN (?, ?, ?)
+      )`;
+      params.push(cleanEmp, dashedEmp, spacedEmp, cleanEmp, dashedEmp, spacedEmp, cleanEmp, dashedEmp, spacedEmp);
+    }
+
+    const [attRows]: any = await pool.query(attQuery, params);
+    if (!attRows || attRows.length === 0) return;
+
+    for (const att of attRows) {
+      const shiftDate = att.shift_date;
+      if (!shiftDate) continue;
+
+      // Check if this shift is already in eod_reports
+      const [existing]: any = await pool.query(
+        "SELECT id, summary, tasks_completed, hours_worked FROM eod_reports WHERE employee_id = ? AND (date = ? OR CAST(date AS CHAR) = ?)",
+        [att.employee_id, shiftDate, shiftDate]
+      );
+
+      // Fetch tasks completed specifically on this shift date
+      const [allCompletedTasks]: any = await pool.query(
+        `SELECT id, title, status, progress, updated_at
+         FROM tasks
+         WHERE assigned_to = ?
+           AND (status = 'completed' OR progress = 100)
+           AND (CAST(updated_at AS CHAR) LIKE CONCAT(?, '%') OR CAST(created_at AS CHAR) LIKE CONCAT(?, '%'))`,
+        [att.employee_id, shiftDate, shiftDate]
+      );
+
+      // Calculate shift hours
+      let durationSec = Number(att.total_duration_seconds) || 0;
+      if (durationSec === 0 && att.punch_in) {
+        const pIn = new Date(att.punch_in).getTime();
+        const pOut = att.punch_out ? new Date(att.punch_out).getTime() : Date.now();
+        durationSec = Math.max(0, Math.floor((pOut - pIn) / 1000));
+      }
+      const hoursWorked = Math.max(0.1, Number((durationSec / 3600).toFixed(2)));
+
+      const completedTitles = (allCompletedTasks || []).map((t: any) => t.title).filter(Boolean);
+      const tasksCompletedString = completedTitles.join("\n");
+
+      // Strictly DO NOT fabricate artificial next_day_plan or carried forward tasks
+      const nextDayPlan: string | null = null;
+
+      let summary = "";
+      if (completedTitles.length > 0) {
+        summary = `Shift concluded. Delivered ${completedTitles.length} deliverable(s): ${completedTitles.join(", ")}. Logged ${hoursWorked}h shift duration.`;
+      } else {
+        summary = `Shift concluded with ${hoursWorked}h logged. Operations completed for ${shiftDate}.`;
+      }
+
+      if (!existing || existing.length === 0) {
+        const reportId = `eod-${att.attendance_id.replace(/^att-/, "")}`;
+        await pool.query(
+          `INSERT INTO eod_reports (id, employee_id, date, summary, tasks_completed, challenges, next_day_plan, hours_worked, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, NULL, ?, ?, COALESCE(?, NOW()), NOW())`,
+          [
+            reportId,
+            att.employee_id,
+            shiftDate,
+            summary,
+            tasksCompletedString,
+            nextDayPlan,
+            hoursWorked,
+            att.punch_out || att.punch_in || new Date(),
+          ]
+        );
+      } else {
+        // If an entry already exists, only update hours_worked or missing completed tasks if recorded for that date
+        const currentEod = existing[0];
+        if ((!currentEod.tasks_completed || currentEod.tasks_completed.trim() === "") && tasksCompletedString) {
+          await pool.query(
+            `UPDATE eod_reports
+             SET tasks_completed = ?, hours_worked = GREATEST(hours_worked, ?), summary = COALESCE(NULLIF(summary, ''), ?)
+             WHERE id = ?`,
+            [tasksCompletedString, hoursWorked, summary, currentEod.id]
+          );
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn("Notice in syncAttendanceToEodReports:", err.message);
+  }
+};
+
 export const getEodReports = async (req: Request, res: Response): Promise<void> => {
   try {
     const { employeeId, date, month, year, page = "1", limit = "10" } = req.query;
+
+    // Automatically synchronize any attendance shifts and completed tasks into eod_reports
+    await syncAttendanceToEodReports(employeeId as string | undefined);
 
     const pageNum = parseInt(page as string, 10) || 1;
     const limitNum = parseInt(limit as string, 10) || 10;
     const offset = (pageNum - 1) * limitNum;
 
     let query = `
-      SELECT r.*, e.first_name, e.last_name, e.employee_id as emp_code, e.designation, d.name as department_name
+      SELECT r.id,
+             r.employee_id,
+             CAST(r.date AS CHAR) as date,
+             r.summary,
+             r.tasks_completed,
+             r.challenges,
+             r.next_day_plan,
+             r.hours_worked,
+             r.created_at,
+             r.updated_at,
+             e.first_name,
+             e.last_name,
+             e.employee_id as emp_code,
+             e.designation,
+             e.avatar_url,
+             d.name as department_name,
+             a.punch_in as check_in_time,
+             a.punch_out as check_out_time,
+             a.total_duration_seconds
       FROM eod_reports r
       JOIN employees e ON r.employee_id = e.id
       LEFT JOIN departments d ON e.department_id = d.id
+      LEFT JOIN attendance a ON a.employee_id = r.employee_id AND (CAST(a.date AS CHAR) = CAST(r.date AS CHAR) OR a.date = r.date)
       WHERE 1=1
     `;
     const params: any[] = [];
 
     if (employeeId) {
-      query += ` AND (r.employee_id = ? OR e.employee_id = ? OR e.user_id = ?)`;
-      params.push(employeeId, employeeId, employeeId);
+      const cleanEmp = String(employeeId).trim();
+      const dashedEmp = cleanEmp.replace(/\s+/g, "-");
+      const spacedEmp = cleanEmp.replace(/-/g, " ");
+      query += ` AND (
+        r.employee_id IN (?, ?, ?) OR 
+        e.employee_id IN (?, ?, ?) OR 
+        e.user_id IN (?, ?, ?)
+      )`;
+      params.push(cleanEmp, dashedEmp, spacedEmp, cleanEmp, dashedEmp, spacedEmp, cleanEmp, dashedEmp, spacedEmp);
     }
     if (date) {
-      query += ` AND r.date = ?`;
-      params.push(date);
+      query += ` AND (r.date = ? OR CAST(r.date AS CHAR) = ?)`;
+      params.push(date, date);
     }
     if (month && year) {
       query += ` AND MONTH(r.date) = ? AND YEAR(r.date) = ?`;
@@ -37,12 +175,12 @@ export const getEodReports = async (req: Request, res: Response): Promise<void> 
 
     // Count query
     const [countRows]: any = await pool.query(
-      query.replace(/SELECT r\.\*,.*?FROM/, "SELECT COUNT(*) as total FROM"),
+      query.replace(/SELECT r\.id,.*?FROM/s, "SELECT COUNT(*) as total FROM"),
       params
     );
     const total = countRows[0]?.total || 0;
 
-    query += ` ORDER BY r.date DESC LIMIT ? OFFSET ?`;
+    query += ` ORDER BY r.date DESC, r.created_at DESC LIMIT ? OFFSET ?`;
     params.push(limitNum, offset);
 
     const [rows]: any = await pool.query(query, params);

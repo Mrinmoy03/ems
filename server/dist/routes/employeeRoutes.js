@@ -8,8 +8,10 @@ const router = (0, express_1.Router)();
 // Employee Listing (accessible by authenticated users)
 router.get("/", auth_1.authenticateToken, employeeController_1.getAllEmployees);
 router.get("/:id", auth_1.authenticateToken, employeeController_1.getEmployeeById);
+// Employee Profile & Avatar Update (Self or Admin)
+router.put("/:id/avatar", auth_1.authenticateToken, employeeController_1.updateEmployeeAvatar);
+router.put("/:id", auth_1.authenticateToken, employeeController_1.updateEmployee);
 // Employee Provisioning & Credential Management (Admin or Super Admin only)
 router.post("/", auth_1.authenticateToken, roleGuard_1.isAdminOrSuperAdmin, employeeController_1.createEmployee);
-router.put("/:id", auth_1.authenticateToken, roleGuard_1.isAdminOrSuperAdmin, employeeController_1.updateEmployee);
 router.put("/:id/password", auth_1.authenticateToken, roleGuard_1.isAdminOrSuperAdmin, employeeController_1.updateEmployeePassword);
 exports.default = router;

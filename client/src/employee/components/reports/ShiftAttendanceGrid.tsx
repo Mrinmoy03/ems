@@ -44,7 +44,7 @@ export const ShiftAttendanceGrid: React.FC<ShiftAttendanceGridProps> = ({
         <div>
           <span className="text-[10px] text-slate-400 dark:text-slate-500 block uppercase font-medium">Log In Time</span>
           <span className="font-bold text-slate-800 dark:text-slate-200 font-mono text-[11px] block">
-            {checkIn || "08:45 AM"}
+            {checkIn || "—"}
           </span>
           <span className="text-[9px] text-slate-400 dark:text-slate-500 block font-sans">
             Shift Punch-in
@@ -63,10 +63,10 @@ export const ShiftAttendanceGrid: React.FC<ShiftAttendanceGridProps> = ({
             "font-bold font-mono text-[11px] block",
             isLiveSession ? "text-emerald-600 dark:text-emerald-400" : "text-slate-800 dark:text-slate-200"
           )}>
-            {checkOut || "06:00 PM"}
+            {isLiveSession ? "Active Session" : (checkOut && checkOut !== "—" ? checkOut : "—")}
           </span>
           <span className="text-[9px] text-slate-400 dark:text-slate-500 block font-sans">
-            {isLiveSession ? "Active shift" : "Shift Punch-out"}
+            {isLiveSession ? "Shift in progress" : "Shift Punch-out"}
           </span>
         </div>
       </div>
@@ -87,7 +87,7 @@ export const ShiftAttendanceGrid: React.FC<ShiftAttendanceGridProps> = ({
           >
             {isLiveSession
               ? "Timer active (pauses on break)"
-              : `${timing.grossFormatted} gross − ${timing.breakFormatted} break`}
+              : timing.formulaExplanation}
           </span>
         </div>
       </div>
@@ -103,7 +103,7 @@ export const ShiftAttendanceGrid: React.FC<ShiftAttendanceGridProps> = ({
             {timing.breakFormatted}
           </span>
           <span className="text-[9px] text-amber-600/90 dark:text-amber-400/90 block font-medium">
-            Timer paused (deducted)
+            {timing.breakMinutes > 0 ? "Timer paused during break" : "No break recorded"}
           </span>
         </div>
       </div>

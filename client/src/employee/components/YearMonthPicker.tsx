@@ -27,6 +27,7 @@ export interface YearMonthPickerProps {
   variant?: "standard" | "compact"
   className?: string
   showBadges?: boolean
+  monthStats?: Record<string, { daysCount: number; taskCount: number }>
 }
 
 export const YearMonthPicker: React.FC<YearMonthPickerProps> = ({
@@ -39,6 +40,7 @@ export const YearMonthPicker: React.FC<YearMonthPickerProps> = ({
   variant = "standard",
   className,
   showBadges = true,
+  monthStats,
 }) => {
   const availableYears = useMemo(() => getAvailableYears(), [])
 
@@ -188,8 +190,9 @@ export const YearMonthPicker: React.FC<YearMonthPickerProps> = ({
             </div>
             {monthsInSelectedYear.map((m: MonthOption) => {
               const monthData = getMonthData(m.key)
-              const taskCount = monthData?.summary?.tasksCompleted ?? m.tasksCompleted ?? 0
-              const daysCount = monthData?.summary?.daysPresent ?? m.daysPresent ?? 0
+              const custom = monthStats?.[m.key]
+              const taskCount = custom?.taskCount ?? monthData?.summary?.tasksCompleted ?? m.tasksCompleted ?? 0
+              const daysCount = custom?.daysCount ?? monthData?.summary?.daysPresent ?? m.daysPresent ?? 0
 
               return (
                 <SelectItem

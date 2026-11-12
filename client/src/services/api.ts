@@ -59,6 +59,11 @@ export const api = {
         method: "PUT",
         body: JSON.stringify(employeeData),
       }),
+    updateAvatar: (id: string, avatarUrl: string) =>
+      request<{ success: boolean; message: string; avatarUrl: string }>(`/employees/${id}/avatar`, {
+        method: "PUT",
+        body: JSON.stringify({ avatarUrl }),
+      }),
     updatePassword: (id: string, newPassword: string) =>
       request<{ success: boolean; message: string }>(`/employees/${id}/password`, {
         method: "PUT",

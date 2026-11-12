@@ -7,7 +7,7 @@ import { initialMockEmployee, initialMockNotifications } from "../data/mockEmplo
 import { initialMockTasks } from "../data/mockTasks"
 import { initialMockLeaveRequests } from "../data/mockLeaveRequests"
 import { initialRecentActivities } from "../data/mockReports"
-import { deriveTaskStatus, calculateTaskCounts } from "../utils/taskStatus"
+import { deriveTaskStatus, calculateTaskCounts, getTodayDateString, isTaskForDate } from "../utils/taskStatus"
 import { formatDurationToHuman } from "../utils/formatDuration"
 import { useWorkingTimer } from "../hooks/useWorkingTimer"
 import { useProjects } from "../../context/ProjectContext"
@@ -40,12 +40,14 @@ interface EmployeeContextValue {
   notificationPreferences: NotificationPreferences
   tasks: EmployeeTask[]
   taskCounts: TaskCounts
+  todayTasks: EmployeeTask[]
+  todayTaskCounts: TaskCounts
   leaveRequests: LeaveRequest[]
   recentActivities: RecentActivityItem[]
   timer: ReturnType<typeof useWorkingTimer>
 
   // Actions
-  updateEmployeeAvatar: (newUrl: string) => void
+  updateEmployeeAvatar: (newUrl: string) => Promise<boolean>
   markNotificationRead: (id: string) => void
   markAllNotificationsRead: () => void
   addNotification: (
@@ -64,7 +66,7 @@ const EmployeeContext = createContext<EmployeeContextValue | undefined>(undefine
 
 export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { syncTaskProgressToProject } = useProjects()
-  const { user: authUser } = useAuth()
+  const { user: authUser, updateUser: authUpdateUser } = useAuth()
   const [employee, setEmployee] = useState<EmployeeProfile>(initialMockEmployee)
   const [notifications, setNotifications] = useState<EmployeeNotification[]>(initialMockNotifications)
   const [tasks, setTasks] = useState<EmployeeTask[]>(initialMockTasks)
@@ -153,21 +155,65 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     })
   }, [])
 
-  const timer = useWorkingTimer(authUser?.employeeId || authUser?.id)
+  const timer = useWorkingTimer(authUser?.role === "employee" ? (authUser?.employeeId || authUser?.id) : undefined)
 
-  // Calculate live task counts
+  // Calculate live task counts across all dates
   const taskCounts = useMemo(() => {
     return calculateTaskCounts(tasks)
   }, [tasks])
+
+  const todayStr = useMemo(() => getTodayDateString(), [])
+
+  // Tasks relevant to today's active shift (excluding past completed tasks)
+  const todayTasks = useMemo(() => {
+    return tasks.filter(task => isTaskForDate(task, todayStr, todayStr))
+  }, [tasks, todayStr])
+
+  // Task counts for today's active shift (accurately reflecting today's workload)
+  const todayTaskCounts = useMemo(() => {
+    return calculateTaskCounts(todayTasks)
+  }, [todayTasks])
 
   const unreadNotificationCount = useMemo(() => {
     return notifications.filter(n => !n.isRead).length
   }, [notifications])
 
-  const updateEmployeeAvatar = useCallback((newUrl: string) => {
-    setEmployee(prev => ({ ...prev, avatarUrl: newUrl }))
-    toast.success("Profile avatar updated successfully")
-  }, [])
+  const updateEmployeeAvatar = useCallback(async (newUrl: string): Promise<boolean> => {
+    const trimmed = newUrl.trim()
+    if (!trimmed) return false
+
+    // 1. Instantly update React component state
+    setEmployee(prev => ({ ...prev, avatarUrl: trimmed }))
+
+    // 2. Persist to AuthContext and localStorage
+    if (authUpdateUser) {
+      authUpdateUser({ avatarUrl: trimmed })
+    }
+
+    // 3. Persist to MariaDB backend
+    const empId = authUser?.employeeId || authUser?.id
+    if (empId) {
+      try {
+        const res = await api.employees.updateAvatar(empId, trimmed)
+        if (res && res.success) {
+          // Broadcast to Admin / Super Admin dashboards
+          try {
+            const ch = new BroadcastChannel("worktrack_employees")
+            ch.postMessage({ type: "AVATAR_UPDATED", employeeId: empId, avatarUrl: trimmed })
+            ch.close()
+          } catch {}
+          toast.success("Profile photo updated and saved to database!")
+          return true
+        }
+      } catch (err: any) {
+        console.error("Failed to persist avatar:", err)
+        toast.error(err.message || "Failed to save profile photo to server.")
+        return false
+      }
+    }
+    toast.success("Profile photo updated successfully")
+    return true
+  }, [authUser, authUpdateUser])
 
   // Fetch backend tasks for authenticated employee
   const refreshTasks = useCallback(async () => {
@@ -197,7 +243,13 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             isSelfCreated: false,
             createdAt: row.created_at || new Date().toISOString(),
             updatedAt: row.updated_at || new Date().toISOString(),
-            completedAt: isCompleted ? row.updated_at || new Date().toISOString() : undefined,
+            completedAt: isCompleted
+              ? (row.completed_at
+                  ? (typeof row.completed_at === "string" ? row.completed_at : new Date(row.completed_at).toISOString())
+                  : (row.deadline
+                      ? (typeof row.deadline === "string" ? row.deadline : new Date(row.deadline).toISOString())
+                      : row.created_at || new Date().toISOString()))
+              : undefined,
             projectId: row.project_id || undefined,
             projectName: row.project_name || undefined,
             projectPartId: row.project_part_id || undefined,
@@ -285,6 +337,7 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     let chTasks: BroadcastChannel | null = null
     let chLeave: BroadcastChannel | null = null
+    let chEmployees: BroadcastChannel | null = null
     try {
       chTasks = new BroadcastChannel("worktrack_tasks")
       chTasks.onmessage = () => {
@@ -294,6 +347,10 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       chLeave.onmessage = () => {
         refreshLeaveRequests()
       }
+      chEmployees = new BroadcastChannel("worktrack_employees")
+      chEmployees.onmessage = () => {
+        fetchEmployeeProfile()
+      }
     } catch {}
 
     return () => {
@@ -301,6 +358,7 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       window.removeEventListener("focus", onFocus)
       if (chTasks) chTasks.close()
       if (chLeave) chLeave.close()
+      if (chEmployees) chEmployees.close()
     }
   }, [authUser, fetchEmployeeProfile, fetchNotifications, refreshTasks, refreshLeaveRequests])
 
@@ -716,6 +774,8 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       notificationPreferences,
       tasks,
       taskCounts,
+      todayTasks,
+      todayTaskCounts,
       leaveRequests,
       recentActivities,
       timer,
@@ -738,6 +798,8 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       notificationPreferences,
       tasks,
       taskCounts,
+      todayTasks,
+      todayTaskCounts,
       leaveRequests,
       recentActivities,
       timer,

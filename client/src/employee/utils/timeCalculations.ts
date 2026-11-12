@@ -94,65 +94,57 @@ export function calculateNetShiftHours(
   fallbackLoggedHours?: string | number
 ): ShiftTimeCalculation {
   const inMins = parseTimeToMinutes(checkInStr)
-  const isLive = !checkOutStr || checkOutStr.toLowerCase().includes("live") || checkOutStr.toLowerCase().includes("progress")
+  const isLive = !checkOutStr || checkOutStr.toLowerCase().includes("live") || checkOutStr.toLowerCase().includes("progress") || checkOutStr === "—"
   const outMins = isLive ? null : parseTimeToMinutes(checkOutStr)
-  const breakMinutes = parseBreakToMinutes(breakStr || "45m")
+  const breakMinutes = parseBreakToMinutes(breakStr || "0m")
 
-  // If both check-in and check-out are valid static timestamps
-  if (inMins !== null && outMins !== null) {
-    let grossMinutes = outMins - inMins
-    if (grossMinutes < 0) grossMinutes += 24 * 60 // Handles crossing midnight
-
-    const netMinutes = Math.max(0, grossMinutes - breakMinutes)
-    const grossFormatted = formatMinutesToHoursMinutes(grossMinutes)
-    const netHoursFormatted = formatMinutesToHoursMinutes(netMinutes)
-    const netHoursDecimal = Number((netMinutes / 60).toFixed(2))
-
-    return {
-      grossMinutes,
-      grossFormatted,
-      breakMinutes,
-      breakFormatted: `${breakMinutes}m`,
-      netMinutes,
-      netHoursFormatted,
-      netHoursDecimal,
-      formulaExplanation: `${grossFormatted} gross − ${breakMinutes}m break = ${netHoursFormatted} net worked`,
-    }
-  }
-
-  // Fallback if live or only elapsed hours provided
+  // If exact logged duration from timer or database is provided, that is the single source of truth
   let netMinutes = 0
-  if (typeof fallbackLoggedHours === "number") {
+  let hasExactFallback = false
+
+  if (typeof fallbackLoggedHours === "number" && fallbackLoggedHours > 0) {
     netMinutes = Math.round(fallbackLoggedHours * 60)
-  } else if (typeof fallbackLoggedHours === "string") {
+    hasExactFallback = true
+  } else if (typeof fallbackLoggedHours === "string" && fallbackLoggedHours.trim()) {
     const match = fallbackLoggedHours.match(/(\d+)h\s*(\d+)?m?/)
     if (match) {
       const h = parseInt(match[1], 10)
       const m = match[2] ? parseInt(match[2], 10) : 0
       netMinutes = h * 60 + m
+      hasExactFallback = true
     } else {
       const parsedFloat = parseFloat(fallbackLoggedHours)
-      if (!isNaN(parsedFloat)) {
+      if (!isNaN(parsedFloat) && parsedFloat > 0) {
         netMinutes = Math.round(parsedFloat * 60)
+        hasExactFallback = true
       }
     }
   }
 
+  // If no exact logged hours provided, compute from check-in and check-out timestamps
+  if (!hasExactFallback && inMins !== null && outMins !== null) {
+    let grossMinutes = outMins - inMins
+    if (grossMinutes < 0) grossMinutes += 24 * 60 // Handles crossing midnight
+    netMinutes = Math.max(0, grossMinutes - breakMinutes)
+  }
+
+  const grossMinutes = Math.max(netMinutes, netMinutes + breakMinutes)
+  const grossFormatted = formatMinutesToHoursMinutes(grossMinutes)
   const netHoursFormatted = formatMinutesToHoursMinutes(netMinutes)
   const netHoursDecimal = Number((netMinutes / 60).toFixed(2))
-  const grossMinutes = netMinutes + breakMinutes
-  const grossFormatted = formatMinutesToHoursMinutes(grossMinutes)
 
   return {
     grossMinutes,
     grossFormatted,
     breakMinutes,
-    breakFormatted: `${breakMinutes}m`,
+    breakFormatted: breakMinutes > 0 ? `${breakMinutes}m` : "0m",
     netMinutes,
     netHoursFormatted,
     netHoursDecimal,
     formulaExplanation: isLive
-      ? `Active shift timer (pauses automatically during break)`
-      : `${grossFormatted} gross − ${breakMinutes}m break = ${netHoursFormatted} net worked`,
+      ? "Active shift timer (pauses automatically during break)"
+      : breakMinutes > 0
+      ? `${grossFormatted} gross − ${breakMinutes}m break = ${netHoursFormatted} net worked`
+      : `${netHoursFormatted} logged work duration`,
   }
 }

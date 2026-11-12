@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { EmployeeTask, TaskProgress as TaskProgressType, TaskFilterType } from "../types/task"
 import { useEmployee } from "../context/EmployeeContext"
-import { deriveTaskStatus, isTaskCompletedLate } from "../utils/taskStatus"
+import { deriveTaskStatus, isTaskCompletedLate, calculateTaskCounts, getTodayDateString, isTaskForDate } from "../utils/taskStatus"
+import { format } from "date-fns"
 import { formatDeadline } from "../utils/date"
 import { TaskStatusBadge } from "./TaskStatusBadge"
 import { TaskProgress } from "./TaskProgress"
@@ -64,6 +65,7 @@ export interface TaskTableProps {
   style?: React.CSSProperties
   enablePagination?: boolean
   pageSize?: number
+  defaultDate?: string
 }
 
 export const TaskTable: React.FC<TaskTableProps> = ({
@@ -71,9 +73,14 @@ export const TaskTable: React.FC<TaskTableProps> = ({
   style,
   enablePagination = false,
   pageSize = 10,
+  defaultDate,
 }) => {
-  const { tasks, taskCounts, updateTaskProgress, updateTaskComment, markTaskComplete, addTask } = useEmployee()
+  const { tasks, updateTaskProgress, updateTaskComment, markTaskComplete, addTask } = useEmployee()
   const { getProject } = useProjects()
+
+  // Date filter state: defaults to today so past completed tasks do not clutter Today's Tasks
+  const todayStr = useMemo(() => getTodayDateString(), [])
+  const [selectedDate, setSelectedDate] = useState<string>(defaultDate !== undefined ? defaultDate : todayStr)
 
   // Filter & Search states
   const [activeFilter, setActiveFilter] = useState<TaskFilterType>("all")
@@ -88,10 +95,10 @@ export const TaskTable: React.FC<TaskTableProps> = ({
     setCurrentPageSize(pageSize)
   }, [pageSize])
 
-  // Reset to page 1 whenever active filter or search query changes
+  // Reset to page 1 whenever active filter, search query, or date filter changes
   useEffect(() => {
     setCurrentPage(1)
-  }, [activeFilter, searchQuery])
+  }, [activeFilter, searchQuery, selectedDate])
 
   // Dialog states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -117,9 +124,15 @@ export const TaskTable: React.FC<TaskTableProps> = ({
     },
   })
 
-  // Filter tasks dynamically using centralized derivation
+  // 1. Filter tasks by selected calendar date (or today/all dates)
+  const dateFilteredTasks = useMemo(() => {
+    if (!selectedDate) return tasks
+    return tasks.filter(task => isTaskForDate(task, selectedDate, todayStr))
+  }, [tasks, selectedDate, todayStr])
+
+  // 2. Filter tasks by status tab and text search
   const filteredTasks = useMemo(() => {
-    return tasks.filter(task => {
+    return dateFilteredTasks.filter(task => {
       const currentStatus = deriveTaskStatus(task)
       const matchesFilter =
         activeFilter === "all" ||
@@ -134,7 +147,20 @@ export const TaskTable: React.FC<TaskTableProps> = ({
 
       return matchesFilter && matchesSearch
     })
-  }, [tasks, activeFilter, searchQuery])
+  }, [dateFilteredTasks, activeFilter, searchQuery])
+
+  // Dynamic tab counts reflecting the current calendar date filter
+  const currentTabCounts = useMemo(() => {
+    return calculateTaskCounts(dateFilteredTasks)
+  }, [dateFilteredTasks])
+
+  const filterTabs: { id: TaskFilterType; label: string; count: number; color?: string }[] = useMemo(() => [
+    { id: "all", label: "All Tasks", count: currentTabCounts.all },
+    { id: "pending", label: "Pending", count: currentTabCounts.pending },
+    { id: "in-progress", label: "In Progress", count: currentTabCounts.inProgress, color: "text-amber-600" },
+    { id: "completed", label: "Completed", count: currentTabCounts.completed, color: "text-emerald-600" },
+    { id: "overdue", label: "Overdue", count: currentTabCounts.overdue, color: "text-red-600" },
+  ], [currentTabCounts])
 
   // Pagination calculations
   const totalPages = Math.max(1, Math.ceil(filteredTasks.length / currentPageSize))
@@ -182,14 +208,6 @@ export const TaskTable: React.FC<TaskTableProps> = ({
     setIsAddModalOpen(false)
   }
 
-  const filterTabs: { id: TaskFilterType; label: string; count: number; color?: string }[] = [
-    { id: "all", label: "All Tasks", count: taskCounts.all },
-    { id: "pending", label: "Pending", count: taskCounts.pending },
-    { id: "in-progress", label: "In Progress", count: taskCounts.inProgress, color: "text-amber-600" },
-    { id: "completed", label: "Completed", count: taskCounts.completed, color: "text-emerald-600" },
-    { id: "overdue", label: "Overdue", count: taskCounts.overdue, color: "text-red-600" },
-  ]
-
   return (
     <Card
       style={style}
@@ -198,17 +216,29 @@ export const TaskTable: React.FC<TaskTableProps> = ({
         className
       )}
     >
-      {/* Header with Title and Add Task */}
+      {/* Header with Dynamic Date-Aware Title and Add Task */}
       <CardHeader className="p-5 pb-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
         <div>
           <CardTitle className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-            Today's Tasks
-            <span className="text-xs font-normal text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
-              {tasks.length} total
+            {selectedDate === todayStr ? (
+              "Today's Tasks"
+            ) : selectedDate ? (
+              <span>
+                Tasks for {format(new Date(selectedDate + "T00:00:00"), "MMM d, yyyy")}
+              </span>
+            ) : (
+              "All Tasks"
+            )}
+            <span className="text-xs font-normal text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full font-mono">
+              {dateFilteredTasks.length} {dateFilteredTasks.length === 1 ? "task" : "tasks"}
             </span>
           </CardTitle>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Manage your daily assignments, update progress, and log status
+            {selectedDate === todayStr
+              ? "Manage your daily assignments, update progress, and log status"
+              : selectedDate
+              ? `Filtered view for assignments and deliverables on ${format(new Date(selectedDate + "T00:00:00"), "MMMM d, yyyy")}`
+              : "Overview of all active, carried forward, and historical tasks across all dates"}
           </p>
         </div>
 
@@ -222,10 +252,10 @@ export const TaskTable: React.FC<TaskTableProps> = ({
       </CardHeader>
 
       <CardContent className="p-0 flex-1 min-h-0 flex flex-col overflow-hidden">
-        {/* Filters and Search Bar */}
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between shrink-0">
+        {/* Filters, Calendar Date Picker, and Search Bar */}
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 flex flex-col xl:flex-row gap-3 items-stretch xl:items-center justify-between shrink-0">
           {/* Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 xl:pb-0 scrollbar-none">
             {filterTabs.map(tab => (
               <button
                 key={tab.id}
@@ -250,18 +280,104 @@ export const TaskTable: React.FC<TaskTableProps> = ({
             ))}
           </div>
 
-          {/* Search Input */}
-          <div className="relative w-full md:w-64 shrink-0">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-            <Input
-              type="text"
-              placeholder="Search tasks or categories..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="pl-8 h-9 text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100"
-            />
+          {/* Right Controls: Calendar Date Picker, Today Shortcut, Search Input */}
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            {/* Calendar Date Picker Filter */}
+            <div className="relative flex items-center">
+              <Calendar className="w-3.5 h-3.5 text-blue-500 absolute left-2.5 pointer-events-none" />
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={e => setSelectedDate(e.target.value)}
+                className="pl-8 pr-7 h-9 text-xs w-36 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 cursor-pointer font-mono"
+                title="Pick a date from calendar to view tasks"
+              />
+              {selectedDate && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate("")}
+                  className="absolute right-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold leading-none p-0.5"
+                  title="Clear date filter (view all)"
+                >
+                  &times;
+                </button>
+              )}
+            </div>
+
+            {/* Quick Today Shortcut */}
+            <Button
+              type="button"
+              variant={selectedDate === todayStr ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedDate(selectedDate === todayStr ? "" : todayStr)}
+              className={`h-9 px-2.5 text-xs font-medium gap-1 ${
+                selectedDate === todayStr
+                  ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                  : "text-slate-600 dark:text-slate-300"
+              }`}
+              title="Toggle filter for today's tasks"
+            >
+              Today
+            </Button>
+
+            {/* Search Input */}
+            <div className="relative w-full sm:w-52">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+              <Input
+                type="text"
+                placeholder="Search tasks..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="pl-8 h-9 text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100"
+              />
+            </div>
           </div>
         </div>
+
+        {/* Active Calendar Date Filter Banner */}
+        {selectedDate && selectedDate !== todayStr && (
+          <div className="mx-4 mt-3 flex items-center justify-between p-2.5 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs text-blue-900 dark:text-blue-200">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span>
+                Viewing tasks for{" "}
+                <strong className="font-semibold underline">
+                  {format(new Date(selectedDate + "T00:00:00"), "MMMM d, yyyy")}
+                </strong>{" "}
+                ({dateFilteredTasks.length} {dateFilteredTasks.length === 1 ? "task" : "tasks"} matching)
+              </span>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedDate(todayStr)}
+              className="h-6 px-2 text-[11px] text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900 font-medium"
+            >
+              Return to Today
+            </Button>
+          </div>
+        )}
+
+        {!selectedDate && (
+          <div className="mx-4 mt-3 flex items-center justify-between p-2.5 rounded-lg bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300">
+            <div className="flex items-center gap-2">
+              <Layers className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <span>
+                Viewing all tasks across all dates ({tasks.length} total)
+              </span>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedDate(todayStr)}
+              className="h-6 px-2 text-[11px] text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 font-medium"
+            >
+              Show Today's Tasks
+            </Button>
+          </div>
+        )}
 
         {/* Task Table (CRITICAL: NO Time Allotted column!) */}
         <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto scrollbar-thin">
@@ -290,9 +406,11 @@ export const TaskTable: React.FC<TaskTableProps> = ({
                       <p className="text-xs text-slate-400 max-w-xs">
                         {searchQuery
                           ? `No tasks matching "${searchQuery}" in ${activeFilter} filter.`
+                          : selectedDate && selectedDate !== todayStr
+                          ? `No tasks recorded for ${format(new Date(selectedDate + "T00:00:00"), "MMMM d, yyyy")}.`
                           : `There are currently no tasks in the ${activeFilter} category.`}
                       </p>
-                      {activeFilter !== "all" && (
+                      {activeFilter !== "all" || searchQuery ? (
                         <Button
                           variant="outline"
                           size="sm"
@@ -302,9 +420,18 @@ export const TaskTable: React.FC<TaskTableProps> = ({
                           }}
                           className="mt-2 text-xs"
                         >
-                          Clear Filters
+                          Clear Status / Search Filters
                         </Button>
-                      )}
+                      ) : selectedDate && selectedDate !== todayStr ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedDate(todayStr)}
+                          className="mt-2 text-xs"
+                        >
+                          Show Today's Tasks
+                        </Button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>

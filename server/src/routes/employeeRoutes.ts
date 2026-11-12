@@ -4,6 +4,7 @@ import {
   getEmployeeById,
   createEmployee,
   updateEmployee,
+  updateEmployeeAvatar,
   updateEmployeePassword,
 } from "../controllers/employeeController";
 import { authenticateToken } from "../middleware/auth";
@@ -15,9 +16,12 @@ const router = Router();
 router.get("/", authenticateToken, getAllEmployees);
 router.get("/:id", authenticateToken, getEmployeeById);
 
+// Employee Profile & Avatar Update (Self or Admin)
+router.put("/:id/avatar", authenticateToken, updateEmployeeAvatar);
+router.put("/:id", authenticateToken, updateEmployee);
+
 // Employee Provisioning & Credential Management (Admin or Super Admin only)
 router.post("/", authenticateToken, isAdminOrSuperAdmin, createEmployee);
-router.put("/:id", authenticateToken, isAdminOrSuperAdmin, updateEmployee);
 router.put("/:id/password", authenticateToken, isAdminOrSuperAdmin, updateEmployeePassword);
 
 export default router;
