@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
 const routes_1 = __importDefault(require("./routes"));
 const errorHandler_1 = require("./middleware/errorHandler");
 const app = (0, express_1.default)();
@@ -17,10 +18,30 @@ app.use((0, cors_1.default)({
     allowedHeaders: ["Content-Type", "Authorization"],
 }));
 // Body Parsing
-app.use(express_1.default.json({ limit: "10mb" }));
-app.use(express_1.default.urlencoded({ extended: true, limit: "10mb" }));
-// Static uploads directory
-app.use("/uploads", express_1.default.static(path_1.default.join(process.cwd(), process.env.UPLOAD_DIR || "uploads")));
+app.use(express_1.default.json({ limit: "15mb" }));
+app.use(express_1.default.urlencoded({ extended: true, limit: "15mb" }));
+// Static uploads directory (ensures server/uploads/avatars exists and is served)
+const uploadsDirs = [
+    path_1.default.resolve(__dirname, "../uploads"),
+    path_1.default.resolve(process.cwd(), "server/uploads"),
+    path_1.default.resolve(process.cwd(), "uploads"),
+];
+uploadsDirs.forEach((dir) => {
+    if (!fs_1.default.existsSync(dir)) {
+        try {
+            fs_1.default.mkdirSync(dir, { recursive: true });
+        }
+        catch { }
+    }
+    const avatarsSubdir = path_1.default.join(dir, "avatars");
+    if (!fs_1.default.existsSync(avatarsSubdir)) {
+        try {
+            fs_1.default.mkdirSync(avatarsSubdir, { recursive: true });
+        }
+        catch { }
+    }
+    app.use("/uploads", express_1.default.static(dir));
+});
 // System Health Endpoint
 app.get("/api/health", (_req, res) => {
     res.status(200).json({

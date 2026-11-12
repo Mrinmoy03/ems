@@ -75,7 +75,7 @@ const getProjectById = async (req, res) => {
 exports.getProjectById = getProjectById;
 const createProject = async (req, res) => {
     try {
-        const { projectCode, name, client, description, ownerId, status, priority, startDate, deadline, liveUrl, stagingUrl, repoUrl, figmaUrl, } = req.body;
+        const { projectCode, name, client, description, ownerId, status, priority, startDate, deadline, liveUrl, stagingUrl, repoUrl, figmaUrl, parts, } = req.body;
         if (!projectCode || !name || !startDate || !deadline) {
             res.status(400).json({
                 success: false,
@@ -101,6 +101,23 @@ const createProject = async (req, res) => {
             repoUrl || null,
             figmaUrl || null,
         ]);
+        if (Array.isArray(parts) && parts.length > 0) {
+            for (const part of parts) {
+                if (!part.name)
+                    continue;
+                const partId = generateId("part");
+                await db_1.default.query(`INSERT INTO project_parts (id, project_id, name, description, weight, department_id, deadline, progress, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 0.00, 'planning')`, [
+                    partId,
+                    projectId,
+                    part.name.trim(),
+                    part.description || null,
+                    Number(part.weight) || 0,
+                    part.departmentId || null,
+                    part.deadline || deadline,
+                ]);
+            }
+        }
         res.status(201).json({
             success: true,
             message: "Project created successfully.",

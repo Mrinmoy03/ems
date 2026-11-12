@@ -48,13 +48,16 @@ export const syncAttendanceToEodReports = async (targetEmpId?: string): Promise<
         [att.employee_id, shiftDate, shiftDate]
       );
 
-      // Fetch tasks completed specifically on this shift date
+      // Fetch tasks completed specifically on this shift date (strictly checking completed_at or deadline)
       const [allCompletedTasks]: any = await pool.query(
-        `SELECT id, title, status, progress, updated_at
+        `SELECT id, title, status, progress, completed_at
          FROM tasks
          WHERE assigned_to = ?
            AND (status = 'completed' OR progress = 100)
-           AND (CAST(updated_at AS CHAR) LIKE CONCAT(?, '%') OR CAST(created_at AS CHAR) LIKE CONCAT(?, '%'))`,
+           AND (
+             (completed_at IS NOT NULL AND CAST(completed_at AS CHAR) LIKE CONCAT(?, '%'))
+             OR (completed_at IS NULL AND CAST(deadline AS CHAR) LIKE CONCAT(?, '%'))
+           )`,
         [att.employee_id, shiftDate, shiftDate]
       );
 

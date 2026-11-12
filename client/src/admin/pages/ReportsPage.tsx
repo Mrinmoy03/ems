@@ -587,6 +587,7 @@ export const ReportsPage: React.FC = () => {
       <WorkingDaysModal
         isOpen={workingDaysModalOpen}
         onClose={() => setWorkingDaysModalOpen(false)}
+        initialMonthKey={selectedMonthKey}
       />
     </div>
   )

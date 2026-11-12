@@ -46,12 +46,15 @@ const syncAttendanceToEodReports = async (targetEmpId) => {
                 continue;
             // Check if this shift is already in eod_reports
             const [existing] = await db_1.default.query("SELECT id, summary, tasks_completed, hours_worked FROM eod_reports WHERE employee_id = ? AND (date = ? OR CAST(date AS CHAR) = ?)", [att.employee_id, shiftDate, shiftDate]);
-            // Fetch tasks completed specifically on this shift date
-            const [allCompletedTasks] = await db_1.default.query(`SELECT id, title, status, progress, updated_at
+            // Fetch tasks completed specifically on this shift date (strictly checking completed_at or deadline)
+            const [allCompletedTasks] = await db_1.default.query(`SELECT id, title, status, progress, completed_at
          FROM tasks
          WHERE assigned_to = ?
            AND (status = 'completed' OR progress = 100)
-           AND (CAST(updated_at AS CHAR) LIKE CONCAT(?, '%') OR CAST(created_at AS CHAR) LIKE CONCAT(?, '%'))`, [att.employee_id, shiftDate, shiftDate]);
+           AND (
+             (completed_at IS NOT NULL AND CAST(completed_at AS CHAR) LIKE CONCAT(?, '%'))
+             OR (completed_at IS NULL AND CAST(deadline AS CHAR) LIKE CONCAT(?, '%'))
+           )`, [att.employee_id, shiftDate, shiftDate]);
             // Calculate shift hours
             let durationSec = Number(att.total_duration_seconds) || 0;
             if (durationSec === 0 && att.punch_in) {

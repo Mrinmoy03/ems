@@ -109,6 +109,7 @@ export const createProject = async (req: Request, res: Response): Promise<void> 
       stagingUrl,
       repoUrl,
       figmaUrl,
+      parts,
     } = req.body;
 
     if (!projectCode || !name || !startDate || !deadline) {
@@ -141,6 +142,26 @@ export const createProject = async (req: Request, res: Response): Promise<void> 
         figmaUrl || null,
       ]
     );
+
+    if (Array.isArray(parts) && parts.length > 0) {
+      for (const part of parts) {
+        if (!part.name) continue;
+        const partId = generateId("part");
+        await pool.query(
+          `INSERT INTO project_parts (id, project_id, name, description, weight, department_id, deadline, progress, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 0.00, 'planning')`,
+          [
+            partId,
+            projectId,
+            part.name.trim(),
+            part.description || null,
+            Number(part.weight) || 0,
+            part.departmentId || null,
+            part.deadline || deadline,
+          ]
+        );
+      }
+    }
 
     res.status(201).json({
       success: true,

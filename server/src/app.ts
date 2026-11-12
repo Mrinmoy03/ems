@@ -1,6 +1,7 @@
 import express, { Application, Request, Response } from "express";
 import cors from "cors";
 import path from "path";
+import fs from "fs";
 import routes from "./routes";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 
@@ -17,11 +18,29 @@ app.use(
 );
 
 // Body Parsing
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 
-// Static uploads directory
-app.use("/uploads", express.static(path.join(process.cwd(), process.env.UPLOAD_DIR || "uploads")));
+// Static uploads directory (ensures server/uploads/avatars exists and is served)
+const uploadsDirs = [
+  path.resolve(__dirname, "../uploads"),
+  path.resolve(process.cwd(), "server/uploads"),
+  path.resolve(process.cwd(), "uploads"),
+];
+uploadsDirs.forEach((dir) => {
+  if (!fs.existsSync(dir)) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch {}
+  }
+  const avatarsSubdir = path.join(dir, "avatars");
+  if (!fs.existsSync(avatarsSubdir)) {
+    try {
+      fs.mkdirSync(avatarsSubdir, { recursive: true });
+    } catch {}
+  }
+  app.use("/uploads", express.static(dir));
+});
 
 // System Health Endpoint
 app.get("/api/health", (_req: Request, res: Response) => {

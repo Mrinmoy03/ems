@@ -91,7 +91,8 @@ exports.applyLeave = applyLeave;
 const decideLeaveRequest = async (req, res) => {
     try {
         const { id } = req.params;
-        const { decision, remarks } = req.body; // 'approved' | 'rejected'
+        const decision = req.body.decision || req.body.status;
+        const remarks = req.body.remarks || req.body.super_admin_remarks;
         if (!["approved", "rejected"].includes(decision)) {
             res.status(400).json({
                 success: false,

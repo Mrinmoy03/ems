@@ -25,6 +25,7 @@ import { EodReportCard } from "../components/reports/EodReportCard"
 import { ReportsPagination } from "../components/reports/ReportsPagination"
 import { downloadDailyEodPDF, exportMonthlyEodPDF } from "../utils/exportEodReport"
 import { DailyEodReport } from "../types/report"
+import { isTaskForDate, getTodayDateString } from "../utils/taskStatus"
 import { api } from "../../services/api"
 import { toast } from "sonner"
 
@@ -127,7 +128,11 @@ export const ReportsPage: React.FC = () => {
   }, [fetchBackendReports])
 
   const handleOpenSubmitModal = () => {
-    const todayCompleted = tasks.filter(t => t.progress === 100 || t.status === "completed").map(t => t.title).join("\n")
+    const todayStr = getTodayDateString()
+    const todayCompleted = tasks
+      .filter(t => (t.progress === 100 || t.status === "completed") && isTaskForDate(t, todayStr, todayStr))
+      .map(t => t.title)
+      .join("\n")
     setCompletedTasksInput(todayCompleted)
     const elapsedHrs = (timer.elapsedSeconds / 3600).toFixed(1)
     setHoursWorkedInput(Number(elapsedHrs) > 0 ? elapsedHrs : "8.0")

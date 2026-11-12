@@ -84,6 +84,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (token) {
       localStorage.setItem(STORAGE_KEY_TOKEN, token);
+      // Fetch latest profile from DB to ensure avatarUrl and role assignments stay fresh
+      api.auth.me()
+        .then(res => {
+          if (res && res.success && res.user) {
+            const u = res.user;
+            setUser(prev => {
+              if (!prev) return null;
+              return {
+                ...prev,
+                name: u.name || prev.name,
+                avatarUrl: u.avatarUrl || u.avatar_url || prev.avatarUrl,
+                department: u.departmentName || u.department || prev.department,
+                designation: u.designation || prev.designation,
+                location: u.location || prev.location,
+              };
+            });
+          }
+        })
+        .catch(() => {});
     } else {
       localStorage.removeItem(STORAGE_KEY_TOKEN);
     }

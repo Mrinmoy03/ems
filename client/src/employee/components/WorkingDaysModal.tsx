@@ -13,8 +13,10 @@ import { getCurrentMonthKey, getMonthData } from "../data/mockReports"
 import { YearMonthPicker } from "./YearMonthPicker"
 import { DataPagination } from "@/components/common/DataPagination"
 import { useEmployee } from "../context/EmployeeContext"
-import { isTaskCompletedLate } from "../utils/taskStatus"
+import { isTaskCompletedLate, getTodayDateString } from "../utils/taskStatus"
 import { formatStandardDate } from "../utils/date"
+import { formatDurationToHuman } from "../utils/formatDuration"
+import { api } from "../../services/api"
 import { cn } from "@/lib/utils"
 import {
   Briefcase,
@@ -41,6 +43,7 @@ export const WorkingDaysModal: React.FC<WorkingDaysModalProps> = ({
   const [searchQuery, setSearchQuery] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [backendAttendance, setBackendAttendance] = React.useState<any[]>([])
 
   // Keep synced if initialMonthKey changes
   React.useEffect(() => {
@@ -49,24 +52,79 @@ export const WorkingDaysModal: React.FC<WorkingDaysModalProps> = ({
     }
   }, [initialMonthKey])
 
+  // Fetch real attendance from database whenever modal is open
+  React.useEffect(() => {
+    if (!isOpen) return
+    const [yr, mo] = selectedMonthKey.split("-")
+    if (yr && mo) {
+      api.attendance.getAll({ month: String(parseInt(mo, 10)), year: yr })
+        .then(res => {
+          if (res && res.success && Array.isArray(res.attendance)) {
+            setBackendAttendance(res.attendance)
+          }
+        })
+        .catch(() => {})
+    }
+  }, [isOpen, selectedMonthKey])
+
   // Reset page when month or search changes
   React.useEffect(() => {
     setCurrentPage(1)
   }, [selectedMonthKey, searchQuery])
 
   const currentMonthData = getMonthData(selectedMonthKey)
-  const { summary, workingDays, monthName, year } = currentMonthData
+  const { summary: staticSummary, workingDays: staticWorkingDays, monthName, year } = currentMonthData
 
-  // Merge live completed tasks into the active month's current day
+  const todayStr = getTodayDateString()
+
+  // Build resolved working days preferring real database attendance records
   const resolvedWorkingDays = React.useMemo(() => {
-    const activeKey = getCurrentMonthKey()
-    if (selectedMonthKey !== activeKey || workingDays.length === 0) {
-      return workingDays
+    if (backendAttendance.length > 0) {
+      return backendAttendance.map(att => {
+        const dObj = new Date(att.date + "T00:00:00")
+        const formattedDate = format(dObj, "MMM d, yyyy")
+        const dayOfWeek = format(dObj, "EEEE")
+        const durSec = Number(att.total_duration_seconds) || 0
+        const isToday = att.date === todayStr
+        const isLive = isToday && !att.punch_out
+        const hoursFormatted = isLive ? "Active Session" : formatDurationToHuman(durSec)
+        const inFormatted = att.punch_in ? new Date(att.punch_in).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"
+        const outFormatted = att.punch_out ? new Date(att.punch_out).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : (isLive ? "Active Session" : "—")
+        const shiftTasks = tasks.filter(t => (t.completedAt || "").startsWith(att.date))
+
+        return {
+          date: formattedDate,
+          rawDate: att.date,
+          dayOfWeek,
+          hoursLogged: Number((durSec / 3600).toFixed(2)),
+          hoursFormatted,
+          checkIn: inFormatted,
+          checkOut: outFormatted,
+          status: (att.status || "present") as any,
+          tasksCompletedCount: shiftTasks.length,
+          tasksCompletedLateCount: shiftTasks.filter(t => isTaskCompletedLate(t)).length,
+          completedTasks: shiftTasks,
+          inProgressTasks: [],
+          summary: isLive ? "Live shift session in progress." : `Shift concluded with ${hoursFormatted} logged.`,
+        }
+      })
     }
 
-    const completedStateTasks = tasks.filter(t => t.progress === 100 || t.status === "completed")
+    const activeKey = getCurrentMonthKey()
+    if (selectedMonthKey !== activeKey || staticWorkingDays.length === 0) {
+      return staticWorkingDays
+    }
 
-    return workingDays.map((day, idx) => {
+    // Live tasks that were completed TODAY specifically
+    const completedTodayTasks = tasks.filter(t => {
+      const isCompleted = t.progress === 100 || t.status === "completed"
+      if (!isCompleted) return false
+      const compDate = (t.completedAt || "").slice(0, 10)
+      const deadDate = (t.deadline || "").slice(0, 10)
+      return (Boolean(compDate) && compDate === todayStr) || (!compDate && deadDate === todayStr)
+    })
+
+    return staticWorkingDays.map((day, idx) => {
       if (idx !== 0) return day
 
       const existingIds = new Set(day.completedTasks.map(t => t.id))
@@ -83,7 +141,7 @@ export const WorkingDaysModal: React.FC<WorkingDaysModalProps> = ({
         return t
       })
 
-      const newlyAdded = completedStateTasks
+      const newlyAdded = completedTodayTasks
         .filter(t => !existingIds.has(t.id))
         .map(t => ({
           id: t.id,
@@ -122,7 +180,28 @@ export const WorkingDaysModal: React.FC<WorkingDaysModalProps> = ({
         inProgressTasks: liveInProgress,
       }
     })
-  }, [workingDays, selectedMonthKey, tasks])
+  }, [backendAttendance, staticWorkingDays, selectedMonthKey, tasks, todayStr])
+
+  // Summary computed dynamically from resolved working days
+  const summary = React.useMemo(() => {
+    if (backendAttendance.length > 0) {
+      const daysCount = resolvedWorkingDays.length
+      const totalH = resolvedWorkingDays.reduce((acc, d) => acc + (d.hoursLogged || 0), 0)
+      const tasksC = resolvedWorkingDays.reduce((acc, d) => acc + (d.tasksCompletedCount || 0), 0)
+      const avg = tasksC > 0 ? (totalH / tasksC).toFixed(1) : "0"
+      return {
+        month: monthName,
+        year,
+        workingDays: 26,
+        daysPresent: daysCount,
+        totalHoursWorked: Number(totalH.toFixed(1)),
+        tasksCompleted: tasksC,
+        completionRate: 100,
+        averageCompletionHours: Number(avg),
+      }
+    }
+    return staticSummary
+  }, [backendAttendance, resolvedWorkingDays, monthName, year, staticSummary])
 
   const filteredDays = resolvedWorkingDays.filter(day => {
     const q = searchQuery.toLowerCase()
@@ -235,7 +314,7 @@ export const WorkingDaysModal: React.FC<WorkingDaysModalProps> = ({
             />
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-            Showing <strong className="text-slate-800 dark:text-slate-200">{filteredDays.length}</strong> of {workingDays.length} working days
+            Showing <strong className="text-slate-800 dark:text-slate-200">{filteredDays.length}</strong> of {resolvedWorkingDays.length} working days
           </span>
         </div>
 
@@ -304,10 +383,10 @@ export const WorkingDaysModal: React.FC<WorkingDaysModalProps> = ({
                           ) : null}
                         </div>
                         <div className="flex flex-wrap gap-1 max-w-sm">
-                          {day.completedTasks.map(task => (
+                          {day.completedTasks.map((task: any) => (
                             <span
                               key={task.id}
-                              title={task.delayReason ? `${task.title} (Delay: ${task.delayReason})` : task.title}
+                              title={task.delayReason || task.comment ? `${task.title} (Delay: ${task.delayReason || task.comment})` : task.title}
                               className={cn(
                                 "text-[10px] px-1.5 py-0.5 rounded truncate max-w-[190px] inline-flex items-center gap-1",
                                 task.isCompletedLate

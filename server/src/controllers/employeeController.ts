@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
+import fs from "fs";
+import path from "path";
 import pool from "../config/db";
 
 // Helper to generate a random or structured UUID
@@ -43,6 +45,10 @@ export const getAllEmployees = async (_req: Request, res: Response): Promise<voi
 export const getEmployeeById = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const cleanId = String(id).trim();
+    const dashedId = cleanId.replace(/\s+/g, "-");
+    const spacedId = cleanId.replace(/-/g, " ");
+
     const [rows]: any = await pool.query(
       `
       SELECT e.*, d.name as department_name, d.code as department_code, u.role,
@@ -62,9 +68,9 @@ export const getEmployeeById = async (req: Request, res: Response): Promise<void
       LEFT JOIN departments d ON e.department_id = d.id
       LEFT JOIN users u ON e.user_id = u.id
       LEFT JOIN attendance a ON e.id = a.employee_id AND a.date = CURDATE()
-      WHERE e.id = ? OR e.employee_id = ?
+      WHERE e.id IN (?, ?, ?) OR e.employee_id IN (?, ?, ?) OR e.user_id IN (?, ?, ?)
     `,
-      [id, id]
+      [cleanId, dashedId, spacedId, cleanId, dashedId, spacedId, cleanId, dashedId, spacedId]
     );
 
     if (!rows || rows.length === 0) {
@@ -431,15 +437,56 @@ export const updateEmployeeAvatar = async (req: Request, res: Response): Promise
       }
     }
 
+    let savedAvatarUrl = finalAvatar;
+
+    // If incoming avatar is a base64 Data URI, decode and save to physical uploads folder
+    if (typeof finalAvatar === "string" && finalAvatar.startsWith("data:image/")) {
+      try {
+        const matches = finalAvatar.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
+        if (matches) {
+          const rawExt = matches[1].toLowerCase();
+          const ext = rawExt === "jpeg" ? "jpg" : (rawExt === "svg+xml" ? "svg" : rawExt);
+          const buffer = Buffer.from(matches[2], "base64");
+          const safeEmpCode = (currentEmp.employee_id || currentEmp.id).replace(/[^a-zA-Z0-9_-]/g, "");
+          const filename = `avatar-${safeEmpCode}-${Date.now()}.${ext}`;
+
+          const serverUploadsDir = path.resolve(__dirname, "../../uploads/avatars");
+          const rootUploadsDir = path.resolve(process.cwd(), "uploads/avatars");
+
+          [serverUploadsDir, rootUploadsDir].forEach(dir => {
+            if (!fs.existsSync(dir)) {
+              fs.mkdirSync(dir, { recursive: true });
+            }
+          });
+
+          fs.writeFileSync(path.join(serverUploadsDir, filename), buffer);
+          try {
+            fs.writeFileSync(path.join(rootUploadsDir, filename), buffer);
+          } catch {}
+
+          savedAvatarUrl = `/uploads/avatars/${filename}`;
+        }
+      } catch (fileErr: any) {
+        console.warn("Notice: could not save physical avatar file, falling back to data URL:", fileErr.message);
+      }
+    }
+
     await pool.query(
       "UPDATE employees SET avatar_url = ? WHERE id = ?",
-      [finalAvatar, currentEmp.id]
+      [savedAvatarUrl, currentEmp.id]
     );
+
+    if (currentEmp.user_id) {
+      await pool.query(
+        "UPDATE users SET avatar_url = ? WHERE id = ?",
+        [savedAvatarUrl, currentEmp.user_id]
+      ).catch(() => {});
+    }
 
     res.status(200).json({
       success: true,
-      message: "Profile photo updated and saved successfully.",
-      avatarUrl: finalAvatar,
+      message: "Profile photo saved to server uploads and updated successfully.",
+      avatarUrl: savedAvatarUrl,
       employeeId: currentEmp.employee_id,
     });
   } catch (error: any) {

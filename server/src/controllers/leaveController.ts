@@ -104,7 +104,8 @@ export const applyLeave = async (req: Request, res: Response): Promise<void> => 
 export const decideLeaveRequest = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { decision, remarks } = req.body; // 'approved' | 'rejected'
+    const decision = req.body.decision || req.body.status;
+    const remarks = req.body.remarks || req.body.super_admin_remarks;
 
     if (!["approved", "rejected"].includes(decision)) {
       res.status(400).json({

@@ -29,7 +29,7 @@ import { TaskStatusBadge } from "./TaskStatusBadge"
 import { YearMonthPicker } from "./YearMonthPicker"
 import { DataPagination } from "@/components/common/DataPagination"
 import { useEmployee } from "../context/EmployeeContext"
-import { isTaskCompletedLate } from "../utils/taskStatus"
+import { isTaskCompletedLate, getTodayDateString } from "../utils/taskStatus"
 import { cn } from "@/lib/utils"
 
 interface SelectedTaskDetails {
@@ -63,7 +63,16 @@ export const TaskHistoryView: React.FC = () => {
       return workingDays
     }
 
-    const completedStateTasks = tasks.filter(t => t.progress === 100 || t.status === "completed")
+    const todayStr = getTodayDateString()
+
+    // Live tasks that were completed TODAY specifically (past completed tasks belong to their respective shift dates)
+    const completedTodayTasks = tasks.filter(t => {
+      const isCompleted = t.progress === 100 || t.status === "completed"
+      if (!isCompleted) return false
+      const compDate = (t.completedAt || "").slice(0, 10)
+      const deadDate = (t.deadline || "").slice(0, 10)
+      return (Boolean(compDate) && compDate === todayStr) || (!compDate && deadDate === todayStr)
+    })
 
     return workingDays.map((day, idx) => {
       if (idx !== 0) return day
@@ -82,7 +91,7 @@ export const TaskHistoryView: React.FC = () => {
         return t
       })
 
-      const newlyAdded = completedStateTasks
+      const newlyAdded = completedTodayTasks
         .filter(t => !existingIds.has(t.id))
         .map(t => ({
           id: t.id,

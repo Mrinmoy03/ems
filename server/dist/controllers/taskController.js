@@ -207,8 +207,10 @@ const updateTaskProgress = async (req, res) => {
             return;
         }
         let newStatus = "pending";
+        let completedAtClause = "completed_at = NULL";
         if (progress === 100) {
             newStatus = "completed";
+            completedAtClause = "completed_at = COALESCE(completed_at, NOW())";
         }
         else if (isOverdue) {
             newStatus = "overdue";
@@ -217,7 +219,7 @@ const updateTaskProgress = async (req, res) => {
             newStatus = "in-progress";
         }
         await db_1.default.query(`UPDATE tasks
-       SET progress = ?, status = ?, delay_reason = COALESCE(?, delay_reason)
+       SET progress = ?, status = ?, delay_reason = COALESCE(?, delay_reason), ${completedAtClause}
        WHERE id = ?`, [progress, newStatus, delayReason || null, id]);
         // Notify admins if completed or overdue delay reported
         try {

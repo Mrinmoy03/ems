@@ -251,8 +251,10 @@ export const updateTaskProgress = async (req: Request, res: Response): Promise<v
     }
 
     let newStatus = "pending";
+    let completedAtClause = "completed_at = NULL";
     if (progress === 100) {
       newStatus = "completed";
+      completedAtClause = "completed_at = COALESCE(completed_at, NOW())";
     } else if (isOverdue) {
       newStatus = "overdue";
     } else if (progress > 0) {
@@ -261,7 +263,7 @@ export const updateTaskProgress = async (req: Request, res: Response): Promise<v
 
     await pool.query(
       `UPDATE tasks
-       SET progress = ?, status = ?, delay_reason = COALESCE(?, delay_reason)
+       SET progress = ?, status = ?, delay_reason = COALESCE(?, delay_reason), ${completedAtClause}
        WHERE id = ?`,
       [progress, newStatus, delayReason || null, id]
     );

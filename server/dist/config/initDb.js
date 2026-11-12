@@ -33,16 +33,19 @@ async function initializeDatabase() {
         const adminPasswordHash = await bcryptjs_1.default.hash("Admin@2026!", 10);
         await connection.query(`INSERT IGNORE INTO users (id, email, password_hash, role, status)
        VALUES (?, ?, ?, 'admin', 'active')`, ["user-admin-01", "admin@vamastudio.com", adminPasswordHash]);
-        // Seed Departments
-        const departments = [
-            ["dept-eng", "Engineering", "ENG", "Software engineering and platform architecture", "#3b82f6"],
-            ["dept-des", "UI/UX Design", "DES", "User interface and experience design studio", "#8b5cf6"],
-            ["dept-qa", "Quality Assurance", "QA", "Automated and manual testing, compliance", "#10b981"],
-            ["dept-ops", "DevOps & Cloud", "OPS", "Infrastructure, CI/CD, and site reliability", "#f59e0b"],
-            ["dept-hr", "Human Resources", "HR", "People operations and talent acquisition", "#ec4899"],
-        ];
-        for (const [id, name, code, desc, color] of departments) {
-            await connection.query(`INSERT IGNORE INTO departments (id, name, code, description, color) VALUES (?, ?, ?, ?, ?)`, [id, name, code, desc, color]);
+        // Seed Departments ONLY if departments table is completely empty (first time installation only)
+        const [existingDepts] = await connection.query("SELECT COUNT(*) as count FROM departments");
+        if (existingDepts && existingDepts[0]?.count === 0) {
+            const departments = [
+                ["dept-eng", "Engineering", "ENG", "Software engineering and platform architecture", "#3b82f6"],
+                ["dept-des", "UI/UX Design", "DES", "User interface and experience design studio", "#8b5cf6"],
+                ["dept-qa", "Quality Assurance", "QA", "Automated and manual testing, compliance", "#10b981"],
+                ["dept-ops", "DevOps & Cloud", "OPS", "Infrastructure, CI/CD, and site reliability", "#f59e0b"],
+                ["dept-hr", "Human Resources", "HR", "People operations and talent acquisition", "#ec4899"],
+            ];
+            for (const [id, name, code, desc, color] of departments) {
+                await connection.query(`INSERT IGNORE INTO departments (id, name, code, description, color) VALUES (?, ?, ?, ?, ?)`, [id, name, code, desc, color]);
+            }
         }
         // Clean state: Admins and Super Admins exist, but employees are created by Admin
         connection.release();

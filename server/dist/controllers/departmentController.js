@@ -35,6 +35,14 @@ const createDepartment = async (req, res) => {
             res.status(400).json({ success: false, message: "Department name and code are required." });
             return;
         }
+        const [existingCode] = await db_1.default.query("SELECT id FROM departments WHERE code = ? OR name = ?", [code.trim().toUpperCase(), name.trim()]);
+        if (existingCode && existingCode.length > 0) {
+            res.status(409).json({
+                success: false,
+                message: `Department with code '${code.trim().toUpperCase()}' or name '${name.trim()}' already exists.`,
+            });
+            return;
+        }
         const deptId = generateId("dept");
         await db_1.default.query("INSERT INTO departments (id, name, code, description, color) VALUES (?, ?, ?, ?, ?)", [deptId, name.trim(), code.trim().toUpperCase(), description || null, color || "#3b82f6"]);
         res.status(201).json({

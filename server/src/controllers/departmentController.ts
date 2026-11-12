@@ -34,6 +34,18 @@ export const createDepartment = async (req: Request, res: Response): Promise<voi
       return;
     }
 
+    const [existingCode]: any = await pool.query(
+      "SELECT id FROM departments WHERE code = ? OR name = ?",
+      [code.trim().toUpperCase(), name.trim()]
+    );
+    if (existingCode && existingCode.length > 0) {
+      res.status(409).json({
+        success: false,
+        message: `Department with code '${code.trim().toUpperCase()}' or name '${name.trim()}' already exists.`,
+      });
+      return;
+    }
+
     const deptId = generateId("dept");
 
     await pool.query(

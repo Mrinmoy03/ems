@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useEffect } from "react"
 import { useEmployee } from "../context/EmployeeContext"
 import { WorkingTimer } from "../components/WorkingTimer"
 import { HoursWorkedChart } from "../components/charts/HoursWorkedChart"
@@ -25,11 +25,12 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
 import { isTaskCompletedLate, getTodayDateString } from "../utils/taskStatus"
+import { api } from "../../services/api"
 
 type TimesheetPeriodType = "weekly" | string
 
 export const TimesheetPage: React.FC = () => {
-  const { timer, tasks } = useEmployee()
+  const { timer, tasks, employee } = useEmployee()
   const { breaks, elapsedSeconds, loginTime, logoutTime, sessionState } = timer
 
   // View state: "weekly" or specific monthKey (e.g. dynamic current month or archived period)
@@ -39,8 +40,21 @@ export const TimesheetPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [isWorkingDaysModalOpen, setIsWorkingDaysModalOpen] = useState(false)
+  const [backendAttendance, setBackendAttendance] = useState<any[]>([])
 
   const todayStr = useMemo(() => getTodayDateString(), [])
+
+  useEffect(() => {
+    const empId = employee?.id
+    if (!empId) return
+    api.attendance.getAll({ employeeId: empId })
+      .then(res => {
+        if (res && res.success && Array.isArray(res.attendance)) {
+          setBackendAttendance(res.attendance)
+        }
+      })
+      .catch(() => {})
+  }, [employee?.id])
 
   // Live tasks completed TODAY specifically
   const todayCompletedTasks = useMemo(() => {
@@ -84,26 +98,54 @@ export const TimesheetPage: React.FC = () => {
       numericHours: Number((elapsedSeconds / 3600).toFixed(2)),
     }
 
-    // Historical attended working days from this month that occurred during this active week
-    const currentMonthWorkingDays = getMonthData(getCurrentMonthKey()).workingDays || []
-    const otherShiftsThisWeek = currentMonthWorkingDays
-      .filter(d => !d.date.includes(format(today, "MMM d")) && !d.date.includes(todayStr))
-      .map(day => ({
-        id: `shift-${day.date}`,
-        date: day.date,
-        dayOfWeek: day.dayOfWeek,
-        inTime: day.checkIn,
-        outTime: day.checkOut,
-        breakDuration: day.breakDuration || "0 mins",
-        totalHours: day.hoursFormatted,
-        status: "Completed",
-        tasksCompletedCount: day.tasksCompletedCount,
-        completedTasks: day.completedTasks,
-        numericHours: day.hoursLogged,
-      }))
+    // Historical attended working days from backend attendance (or fallback)
+    let otherShiftsThisWeek: any[] = []
+    if (backendAttendance.length > 0) {
+      otherShiftsThisWeek = backendAttendance
+        .filter(a => a.date !== todayStr && a.punch_in)
+        .map(a => {
+          const shiftDateObj = new Date(a.date + "T00:00:00")
+          const shiftTasks = tasks.filter(t => (t.completedAt || "").startsWith(a.date))
+          const durSec = Number(a.total_duration_seconds) || 0
+          const formattedHours = formatDurationToHuman(durSec)
+          const inFormatted = a.punch_in ? new Date(a.punch_in).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"
+          const outFormatted = a.punch_out ? new Date(a.punch_out).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"
+
+          return {
+            id: `shift-${a.id}`,
+            date: format(shiftDateObj, "MMM d, yyyy"),
+            dayOfWeek: format(shiftDateObj, "EEEE"),
+            inTime: inFormatted,
+            outTime: outFormatted,
+            breakDuration: "0 mins",
+            totalHours: formattedHours,
+            status: "Completed",
+            tasksCompletedCount: shiftTasks.length,
+            completedTasks: shiftTasks,
+            numericHours: Number((durSec / 3600).toFixed(2)),
+          }
+        })
+    } else {
+      const currentMonthWorkingDays = getMonthData(getCurrentMonthKey()).workingDays || []
+      otherShiftsThisWeek = currentMonthWorkingDays
+        .filter(d => !d.date.includes(format(today, "MMM d")) && !d.date.includes(todayStr))
+        .map(day => ({
+          id: `shift-${day.date}`,
+          date: day.date,
+          dayOfWeek: day.dayOfWeek,
+          inTime: day.checkIn,
+          outTime: day.checkOut,
+          breakDuration: day.breakDuration || "0 mins",
+          totalHours: day.hoursFormatted,
+          status: "Completed",
+          tasksCompletedCount: day.tasksCompletedCount,
+          completedTasks: day.completedTasks,
+          numericHours: day.hoursLogged,
+        }))
+    }
 
     return [todayShift, ...otherShiftsThisWeek]
-  }, [breaks, elapsedSeconds, loginTime, logoutTime, sessionState, todayCompletedTasks, todayStr])
+  }, [breaks, elapsedSeconds, loginTime, logoutTime, sessionState, todayCompletedTasks, todayStr, backendAttendance, tasks])
 
   // Get active items based on period
   const activeItems = useMemo(() => {
@@ -163,7 +205,7 @@ export const TimesheetPage: React.FC = () => {
       const matchDate = item.date.toLowerCase().includes(q) || (item.dayOfWeek && item.dayOfWeek.toLowerCase().includes(q))
       const matchHours = item.totalHours.toLowerCase().includes(q)
       const matchTasks = item.completedTasks?.some(
-        t => t.title.toLowerCase().includes(q) || t.id.toLowerCase().includes(q) || (t.category && t.category.toLowerCase().includes(q))
+        (t: any) => t.title?.toLowerCase().includes(q) || t.id?.toLowerCase().includes(q) || (t.category && t.category.toLowerCase().includes(q))
       )
       return matchDate || matchHours || matchTasks
     })
@@ -491,10 +533,10 @@ export const TimesheetPage: React.FC = () => {
                               {item.tasksCompletedCount} Completed
                             </span>
                             <div className="flex flex-wrap gap-1 max-w-[200px]">
-                              {item.completedTasks?.slice(0, 2).map(t => (
+                              {item.completedTasks?.slice(0, 2).map((t: any) => (
                                 <span
                                   key={t.id}
-                                  title={t.delayReason ? `${t.title} (Delay: ${t.delayReason})` : t.title}
+                                  title={t.delayReason || t.comment ? `${t.title} (Delay: ${t.delayReason || t.comment})` : t.title}
                                   className={cn(
                                     "text-[10px] px-1.5 py-0.5 rounded truncate max-w-[180px] inline-flex items-center gap-1",
                                     t.isCompletedLate

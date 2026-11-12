@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS `tasks` (
   `status` ENUM('pending', 'in-progress', 'completed', 'overdue') NOT NULL DEFAULT 'pending',
   `progress` INT NOT NULL DEFAULT 0,
   `deadline` DATE NOT NULL,
+  `completed_at` TIMESTAMP NULL,
   `delay_reason` TEXT,
   `created_by` VARCHAR(36),
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
