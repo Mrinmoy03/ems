@@ -270,18 +270,22 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children, initialR
             ? new Date(a.punch_out).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
             : "—"
 
+          const breakSecs = (Number(a.lunch_break_seconds) || 0) + (Number(a.tea_break_seconds) || 0)
+          const breakMins = Math.round(breakSecs / 60)
+          const breakDuration = breakMins > 0 ? `${breakMins} mins` : "0 mins"
+
           return {
             id: a.id,
             employeeId: a.emp_code || a.employee_id,
             employeeName: `${a.first_name || ""} ${a.last_name || ""}`.trim() || a.employee_id,
-            employeeAvatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80`,
+            employeeAvatar: a.avatar_url || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80`,
             department: a.department_name || "General",
             date: dateStr,
             dayOfWeek,
             checkIn,
             checkOut,
-            breakDuration: "0 mins",
-            breakDurationSeconds: 0,
+            breakDuration,
+            breakDurationSeconds: breakSecs,
             netHoursWorked: netHours,
             status,
           }
@@ -308,29 +312,41 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children, initialR
             ? (typeof row.created_at === "string" ? row.created_at.slice(0, 10) : new Date(row.created_at).toISOString().slice(0, 10))
             : new Date().toISOString().slice(0, 10)
 
+          const creatorStr = (row.created_by || '').trim()
+          const isCreatorAdmin = ['admin', 'super admin', 'operations admin'].includes(creatorStr.toLowerCase())
+          const isSelfCreated = Boolean(creatorStr && !isCreatorAdmin)
+
+          const isCompleted = row.status === "completed" || Number(row.progress) === 100
+          const completedAtDate = row.completed_at
+            ? (typeof row.completed_at === "string" ? row.completed_at : new Date(row.completed_at).toISOString())
+            : (isCompleted ? (row.deadline ? (typeof row.deadline === "string" ? row.deadline : new Date(row.deadline).toISOString()) : row.created_at || new Date().toISOString()) : undefined)
+
+          const isLate = Boolean(
+            isCompleted &&
+            completedAtDate && row.deadline &&
+            new Date(completedAtDate).getTime() > new Date(row.deadline).getTime()
+          )
+
           return {
             id: row.id,
             title: row.title,
             description: row.description || "",
-            category: row.department_name || "General",
+            category: row.category || "Feature Work",
+            department: row.department_name || "General",
+            departmentName: row.department_name || "General",
             deadline: deadlineFormatted,
             startDate: startDateFormatted,
-            status: row.status || "pending",
+            status: isCompleted ? "completed" : (row.status || "pending"),
             progress: (Number(row.progress) || 0) as TaskProgress,
-            isSelfCreated: false,
+            isSelfCreated,
             assignedTo: [row.emp_code || row.assigned_to],
             assignedEmployeeNames: [`${row.first_name || ""} ${row.last_name || ""}`.trim() || row.emp_code || "Staff"],
-            assignedBy: row.created_by || "Admin",
+            assignedBy: creatorStr ? creatorStr : (isSelfCreated ? "Employee" : "Admin"),
             priority: row.priority || "medium",
             createdAt: row.created_at || new Date().toISOString(),
             updatedAt: row.updated_at || new Date().toISOString(),
-            completedAt: (row.status === "completed" || Number(row.progress) === 100)
-              ? (row.completed_at
-                  ? (typeof row.completed_at === "string" ? row.completed_at : new Date(row.completed_at).toISOString())
-                  : (row.deadline
-                      ? (typeof row.deadline === "string" ? row.deadline : new Date(row.deadline).toISOString())
-                      : row.created_at || new Date().toISOString()))
-              : undefined,
+            completedAt: isCompleted ? completedAtDate : undefined,
+            isCompletedLate: isLate,
             deadlineHistory: row.delay_reason
               ? [
                   {
@@ -835,11 +851,16 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children, initialR
           return match ? `${match.firstName} ${match.lastName}` : empId
         })
 
+      const firstEmp = employees.find(e => input.assignedTo.includes(e.id))
+      const deptName = firstEmp?.department || "General"
+
       const newTask: AdminTask = {
         id: newId,
         title: input.title.trim(),
         description: input.description?.trim(),
-        category: input.category || "General",
+        category: input.category || "Feature Development",
+        department: deptName,
+        departmentName: deptName,
         deadline: input.deadline,
         startDate: input.startDate || nowIso.slice(0, 10),
         status: "pending",
@@ -864,6 +885,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children, initialR
       api.tasks.create({
         title: input.title.trim(),
         description: input.description?.trim(),
+        category: input.category || "Feature Development",
         assignedTo: input.assignedTo,
         deadline: input.deadline,
         priority: input.priority || "medium",
@@ -907,6 +929,12 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children, initialR
       const target = tasks.find(t => t.id === taskId)
       if (!target) {
         return { success: false, error: "Task not found" }
+      }
+
+      if (target.status === "completed" || (Number(target.progress) || 0) === 100) {
+        const error = "Completed tasks are finalized and cannot have their deadline modified."
+        toast.error(error)
+        return { success: false, error }
       }
 
       const nowIso = new Date().toISOString()

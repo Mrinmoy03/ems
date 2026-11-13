@@ -34,9 +34,14 @@ import {
   ShieldCheck,
   AlertCircle,
   FolderKanban,
+  Building2,
+  Layers,
+  Lock,
+  CheckCircle2,
   X,
 } from "lucide-react"
 import { useProjects } from "../../context/ProjectContext"
+import { isTaskCompletedLate } from "../../employee/utils/taskStatus"
 
 export const TasksPage: React.FC = () => {
   const { tasks, employees } = useAdmin()
@@ -90,6 +95,10 @@ export const TasksPage: React.FC = () => {
       )
 
       return matchSearch && matchStatus && matchPriority && matchProject && matchDate
+    }).sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      return timeB - timeA
     })
   }, [tasks, searchTerm, selectedStatus, selectedPriority, selectedProject, selectedDate])
 
@@ -275,6 +284,7 @@ export const TasksPage: React.FC = () => {
             <TableHeader className="bg-slate-50/75 dark:bg-slate-800/50">
               <TableRow className="border-b border-slate-200 dark:border-slate-800">
                 <TableHead className="text-xs font-semibold">Initiative / Task</TableHead>
+                <TableHead className="text-xs font-semibold">Department</TableHead>
                 <TableHead className="text-xs font-semibold">Category</TableHead>
                 <TableHead className="text-xs font-semibold">Assigned Team</TableHead>
                 <TableHead className="text-xs font-semibold">Priority</TableHead>
@@ -286,7 +296,7 @@ export const TasksPage: React.FC = () => {
             <TableBody>
               {filteredTasks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12 text-xs text-slate-500">
+                  <TableCell colSpan={8} className="text-center py-12 text-xs text-slate-500">
                     <div className="space-y-2">
                       <p className="font-semibold text-slate-700 dark:text-slate-300">
                         {selectedDate
@@ -319,7 +329,10 @@ export const TasksPage: React.FC = () => {
                           {task.title}
                         </p>
                         {/* Assignment origin badge */}
-                        {(task.isSelfCreated || task.assignedBy === 'Alex Morgan' || task.assignedBy === 'self' || task.assignedBy === 'Employee') ? (
+                        {Boolean(
+                          task.isSelfCreated ||
+                          (task.assignedBy && !['admin', 'super admin', 'operations admin'].includes(task.assignedBy.trim().toLowerCase()))
+                        ) ? (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                             <UserCheck className="w-2.5 h-2.5" />
                             Self-Assigned
@@ -355,9 +368,20 @@ export const TasksPage: React.FC = () => {
                       )}
                     </TableCell>
 
+                    {/* Department */}
+                    <TableCell className="py-3 text-xs">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-medium border border-slate-200 dark:border-slate-700/60">
+                        <Building2 className="w-3 h-3 text-slate-400" />
+                        {task.departmentName || task.department || (task.assignedTo && task.assignedTo.length > 0 ? getEmployee(task.assignedTo[0])?.department : undefined) || "Web Development"}
+                      </span>
+                    </TableCell>
+
                     {/* Category */}
-                    <TableCell className="py-3 text-xs text-slate-600 dark:text-slate-400">
-                      {task.category}
+                    <TableCell className="py-3 text-xs">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-[11px] font-medium border border-indigo-200/60 dark:border-indigo-800/60">
+                        <Layers className="w-3 h-3 text-indigo-400" />
+                        {task.category || "Feature Work"}
+                      </span>
                     </TableCell>
 
                     {/* Multi-Assignees */}
@@ -408,47 +432,94 @@ export const TasksPage: React.FC = () => {
 
                     {/* Status & Milestone Progress */}
                     <TableCell className="py-3">
-                      <div className="space-y-1.5">
-                        <TaskStatusBadge status={task.status} />
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-300 ${
-                                task.status === 'completed'
-                                  ? 'bg-emerald-500'
-                                  : task.status === 'overdue'
-                                  ? 'bg-rose-500'
-                                  : 'bg-indigo-600'
-                              }`}
-                              style={{ width: `${task.progress ?? (task.status === 'completed' ? 100 : task.status === 'in-progress' ? 50 : 0)}%` }}
-                            />
+                      {(() => {
+                        const isCompleted = task.status === 'completed' || (Number(task.progress) || 0) === 100
+                        const isLate = isTaskCompletedLate(task)
+                        return (
+                          <div className="space-y-1.5">
+                            <TaskStatusBadge status={task.status} isLate={isLate} />
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-300 ${
+                                    isCompleted
+                                      ? (isLate ? 'bg-amber-500' : 'bg-emerald-500')
+                                      : task.status === 'overdue'
+                                      ? 'bg-rose-500'
+                                      : 'bg-indigo-600'
+                                  }`}
+                                  style={{ width: `${task.progress ?? (isCompleted ? 100 : task.status === 'in-progress' ? 50 : 0)}%` }}
+                                />
+                              </div>
+                              <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                                {task.progress ?? (isCompleted ? 100 : task.status === 'in-progress' ? 50 : 0)}%
+                              </span>
+                            </div>
                           </div>
-                          <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                            {task.progress ?? (task.status === 'completed' ? 100 : task.status === 'in-progress' ? 50 : 0)}%
-                          </span>
-                        </div>
-                      </div>
+                        )
+                      })()}
                     </TableCell>
 
-                    {/* Target Deadline */}
-                    <TableCell className="py-3 text-xs font-mono text-slate-700 dark:text-slate-300">
-                      <div className="flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                        <span>{formatDeadline(task.deadline)}</span>
-                      </div>
+                    {/* Target Deadline & Submission Info */}
+                    <TableCell className="py-3 text-xs">
+                      {(() => {
+                        const isCompleted = task.status === 'completed' || (Number(task.progress) || 0) === 100
+                        const isLate = isTaskCompletedLate(task)
+                        return (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-mono text-[11px]">
+                              <Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                              <span>{formatDeadline(task.deadline)}</span>
+                            </div>
+                            {isCompleted && task.completedAt && (
+                              <div className="flex items-center gap-1 text-[11px] pt-0.5 flex-wrap">
+                                <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 ${isLate ? "text-amber-500" : "text-emerald-500"}`} />
+                                <span className="text-slate-500 dark:text-slate-400">Submitted:</span>
+                                <span className={`font-mono font-medium ${isLate ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                                  {formatDeadline(task.completedAt)}
+                                </span>
+                                {isLate ? (
+                                  <span className="text-[10px] font-semibold px-1 py-0.2 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
+                                    Late
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-semibold px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
+                                    On Time
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </TableCell>
 
-                    {/* Action */}
+                    {/* Deadline Audit Action */}
                     <TableCell className="py-3 text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setTaskForDeadline(task)}
-                        className="h-7 px-2.5 text-[11px] text-amber-700 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-950/40 flex items-center gap-1.5 ml-auto"
-                      >
-                        <CalendarClock className="w-3.5 h-3.5" />
-                        Modify Deadline
-                      </Button>
+                      {(() => {
+                        const isCompleted = task.status === 'completed' || (Number(task.progress) || 0) === 100
+                        return isCompleted ? (
+                          <div className="flex items-center justify-end">
+                            <span
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-slate-100 dark:bg-slate-800/80 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-800 cursor-not-allowed select-none"
+                              title="Completed tasks are finalized and cannot have their deadline modified."
+                            >
+                              <Lock className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                              <span>Locked (Completed)</span>
+                            </span>
+                          </div>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setTaskForDeadline(task)}
+                            className="h-7 px-2.5 text-[11px] text-amber-700 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-950/40 flex items-center gap-1.5 ml-auto"
+                          >
+                            <CalendarClock className="w-3.5 h-3.5" />
+                            Modify Deadline
+                          </Button>
+                        )
+                      })()}
                     </TableCell>
                   </TableRow>
                 ))

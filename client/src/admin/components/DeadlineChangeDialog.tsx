@@ -58,6 +58,11 @@ export const DeadlineChangeDialog: React.FC<DeadlineChangeDialogProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (task.status === "completed" || (Number(task.progress) || 0) === 100) {
+      setError("Completed tasks are finalized and cannot have their deadline modified.")
+      return
+    }
+
     if (!newDeadline) {
       setError("Please select a valid new deadline date and time.")
       return

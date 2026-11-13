@@ -231,25 +231,36 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const progressVal = Number(row.progress) || 0
           const isCompleted = progressVal === 100 || row.status === "completed"
 
+          const creatorStr = (row.created_by || '').trim()
+          const isCreatorAdmin = ['admin', 'super admin', 'operations admin'].includes(creatorStr.toLowerCase())
+          const isSelfCreated = Boolean(creatorStr && !isCreatorAdmin)
+
+          const completedAtDate = row.completed_at
+            ? (typeof row.completed_at === "string" ? row.completed_at : new Date(row.completed_at).toISOString())
+            : (isCompleted ? (row.deadline ? (typeof row.deadline === "string" ? row.deadline : new Date(row.deadline).toISOString()) : row.created_at || new Date().toISOString()) : undefined)
+
+          const isLate = Boolean(
+            isCompleted &&
+            completedAtDate && row.deadline &&
+            new Date(completedAtDate).getTime() > new Date(row.deadline).getTime()
+          )
+
           return {
             id: row.id,
             title: row.title,
             description: row.description || "",
-            category: row.department_name || "General",
+            category: row.category || "Feature Work",
+            department: row.department_name || "General",
+            departmentName: row.department_name || "General",
             deadline: deadlineFormatted,
             status: isCompleted ? "completed" : row.status || "pending",
             progress: progressVal as TaskProgress,
             comment: row.delay_reason || "",
-            isSelfCreated: false,
+            isSelfCreated,
             createdAt: row.created_at || new Date().toISOString(),
             updatedAt: row.updated_at || new Date().toISOString(),
-            completedAt: isCompleted
-              ? (row.completed_at
-                  ? (typeof row.completed_at === "string" ? row.completed_at : new Date(row.completed_at).toISOString())
-                  : (row.deadline
-                      ? (typeof row.deadline === "string" ? row.deadline : new Date(row.deadline).toISOString())
-                      : row.created_at || new Date().toISOString()))
-              : undefined,
+            completedAt: isCompleted ? completedAtDate : undefined,
+            isCompletedLate: isLate,
             projectId: row.project_id || undefined,
             projectName: row.project_name || undefined,
             projectPartId: row.project_part_id || undefined,
@@ -522,15 +533,21 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     // Persist task to backend database
     const empIdentifier = authUser?.employeeId || authUser?.id || employee.id
+    const creatorName =
+      (employee.firstName ? `${employee.firstName} ${employee.lastName || ''}`.trim() : '') ||
+      authUser?.name ||
+      "Employee"
+
     api.tasks.create({
       title: input.title.trim(),
       description: input.description?.trim(),
+      category: input.category || "Feature Work",
       assignedTo: empIdentifier,
       deadline: input.deadline,
       priority: "medium",
       projectId: input.projectId,
       projectPartId: input.projectPartId,
-      createdBy: `${employee.firstName} ${employee.lastName}`,
+      createdBy: creatorName,
     }).then(() => {
       try {
         const ch = new BroadcastChannel("worktrack_tasks")
@@ -567,10 +584,15 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [addNotification])
 
   const updateTaskProgress = useCallback((id: string, progress: TaskProgress, comment?: string) => {
+    const targetTask = tasks.find(t => t.id === id)
+    if (targetTask && (targetTask.status === "completed" || targetTask.progress === 100)) {
+      toast.error("Completed tasks are finalized and cannot be modified.")
+      return
+    }
+
     const nowIso = new Date().toISOString()
 
     // Sync to parent project part if this task is project-linked
-    const targetTask = tasks.find(t => t.id === id)
     if (targetTask?.projectId && targetTask?.projectPartId) {
       syncTaskProgressToProject(targetTask.projectId, targetTask.projectPartId, progress)
     }

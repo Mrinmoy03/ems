@@ -34,7 +34,7 @@ const getAllTasks = async (req, res) => {
             query += ` AND t.project_id = ?`;
             params.push(projectId);
         }
-        query += ` ORDER BY t.deadline ASC, t.created_at DESC`;
+        query += ` ORDER BY t.created_at DESC`;
         const [rows] = await db_1.default.query(query, params);
         res.status(200).json({
             success: true,
@@ -48,7 +48,7 @@ const getAllTasks = async (req, res) => {
 exports.getAllTasks = getAllTasks;
 const createTask = async (req, res) => {
     try {
-        const { title, description, assignedTo, departmentId, projectId, projectPartId, priority, deadline, createdBy, } = req.body;
+        const { title, description, category, assignedTo, departmentId, projectId, projectPartId, priority, deadline, createdBy, } = req.body;
         if (!title || !assignedTo || !deadline) {
             res.status(400).json({
                 success: false,
@@ -91,18 +91,19 @@ const createTask = async (req, res) => {
             const taskId = generateId("tsk");
             const deptToUse = resolvedDeptId || resolvedEmp.department_id || null;
             const deadlineDate = deadline ? new Date(deadline) : new Date();
-            await db_1.default.query(`INSERT INTO tasks (id, title, description, assigned_to, department_id, project_id, project_part_id, priority, status, progress, deadline, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)`, [
+            await db_1.default.query(`INSERT INTO tasks (id, title, description, category, assigned_to, department_id, project_id, project_part_id, priority, status, progress, deadline, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)`, [
                 taskId,
                 title.trim(),
                 description || null,
+                (category && String(category).trim()) || "Feature Work",
                 resolvedEmp.id,
                 deptToUse,
                 resolvedProjectId,
                 projectPartId || null,
                 priority || "medium",
                 deadlineDate,
-                createdBy || null,
+                (createdBy && String(createdBy).trim()) || "Admin",
             ]);
             createdTaskIds.push(taskId);
             // Notify assigned employee
@@ -147,6 +148,18 @@ const updateTaskDeadline = async (req, res) => {
             res.status(400).json({
                 success: false,
                 message: "New deadline date and valid justification reason are required.",
+            });
+            return;
+        }
+        const [tasks] = await db_1.default.query("SELECT status, progress FROM tasks WHERE id = ?", [id]);
+        if (!tasks || tasks.length === 0) {
+            res.status(404).json({ success: false, message: "Task not found." });
+            return;
+        }
+        if (tasks[0].status === "completed" || Number(tasks[0].progress) === 100) {
+            res.status(400).json({
+                success: false,
+                message: "Completed tasks are finalized and cannot have their deadline modified.",
             });
             return;
         }
@@ -197,6 +210,13 @@ const updateTaskProgress = async (req, res) => {
             return;
         }
         const task = tasks[0];
+        if (task.status === "completed" || Number(task.progress) === 100) {
+            res.status(400).json({
+                success: false,
+                message: "Completed tasks are finalized and cannot be modified.",
+            });
+            return;
+        }
         const today = new Date().toISOString().split("T")[0];
         const isOverdue = task.deadline < today && progress < 100;
         if (isOverdue && !delayReason && progress < 100) {

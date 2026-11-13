@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS `tasks` (
   `id` VARCHAR(36) PRIMARY KEY,
   `title` VARCHAR(200) NOT NULL,
   `description` TEXT,
+  `category` VARCHAR(100) DEFAULT 'Feature Work',
   `assigned_to` VARCHAR(36) NOT NULL,
   `department_id` VARCHAR(36),
   `project_id` VARCHAR(36),

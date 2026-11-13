@@ -19,6 +19,7 @@ import { AdminDashboardPage } from "../admin/pages/AdminDashboardPage"
 import { EmployeesPage } from "../admin/pages/EmployeesPage"
 import { EmployeeDetailsPage } from "../admin/pages/EmployeeDetailsPage"
 import { DepartmentsPage } from "../admin/pages/DepartmentsPage"
+import { DepartmentDetailsPage } from "../admin/pages/DepartmentDetailsPage"
 import { ProjectsPage } from "../admin/pages/ProjectsPage"
 import { ProjectDetailsPage } from "../admin/pages/ProjectDetailsPage"
 import { TasksPage } from "../admin/pages/TasksPage"
@@ -112,6 +113,10 @@ export const router = createBrowserRouter([
         element: <DepartmentsPage />,
       },
       {
+        path: "departments/:departmentId",
+        element: <DepartmentDetailsPage />,
+      },
+      {
         path: "projects",
         element: <ProjectsPage />,
       },
@@ -166,6 +171,10 @@ export const router = createBrowserRouter([
       {
         path: "departments",
         element: <DepartmentsPage />,
+      },
+      {
+        path: "departments/:departmentId",
+        element: <DepartmentDetailsPage />,
       },
       {
         path: "projects",

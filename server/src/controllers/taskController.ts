@@ -34,7 +34,7 @@ export const getAllTasks = async (req: Request, res: Response): Promise<void> =>
       params.push(projectId);
     }
 
-    query += ` ORDER BY t.deadline ASC, t.created_at DESC`;
+    query += ` ORDER BY t.created_at DESC`;
 
     const [rows]: any = await pool.query(query, params);
 
@@ -52,6 +52,7 @@ export const createTask = async (req: Request, res: Response): Promise<void> => 
     const {
       title,
       description,
+      category,
       assignedTo,
       departmentId,
       projectId,
@@ -121,19 +122,20 @@ export const createTask = async (req: Request, res: Response): Promise<void> => 
       const deadlineDate = deadline ? new Date(deadline) : new Date();
 
       await pool.query(
-        `INSERT INTO tasks (id, title, description, assigned_to, department_id, project_id, project_part_id, priority, status, progress, deadline, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)`,
+        `INSERT INTO tasks (id, title, description, category, assigned_to, department_id, project_id, project_part_id, priority, status, progress, deadline, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)`,
         [
           taskId,
           title.trim(),
           description || null,
+          (category && String(category).trim()) || "Feature Work",
           resolvedEmp.id,
           deptToUse,
           resolvedProjectId,
           projectPartId || null,
           priority || "medium",
           deadlineDate,
-          createdBy || null,
+          (createdBy && String(createdBy).trim()) || "Admin",
         ]
       );
 
@@ -182,6 +184,20 @@ export const updateTaskDeadline = async (req: Request, res: Response): Promise<v
       res.status(400).json({
         success: false,
         message: "New deadline date and valid justification reason are required.",
+      });
+      return;
+    }
+
+    const [tasks]: any = await pool.query("SELECT status, progress FROM tasks WHERE id = ?", [id]);
+    if (!tasks || tasks.length === 0) {
+      res.status(404).json({ success: false, message: "Task not found." });
+      return;
+    }
+
+    if (tasks[0].status === "completed" || Number(tasks[0].progress) === 100) {
+      res.status(400).json({
+        success: false,
+        message: "Completed tasks are finalized and cannot have their deadline modified.",
       });
       return;
     }
@@ -239,6 +255,15 @@ export const updateTaskProgress = async (req: Request, res: Response): Promise<v
     }
 
     const task = tasks[0];
+
+    if (task.status === "completed" || Number(task.progress) === 100) {
+      res.status(400).json({
+        success: false,
+        message: "Completed tasks are finalized and cannot be modified.",
+      });
+      return;
+    }
+
     const today = new Date().toISOString().split("T")[0];
     const isOverdue = task.deadline < today && progress < 100;
 

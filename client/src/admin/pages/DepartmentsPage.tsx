@@ -1,4 +1,5 @@
 import React, { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { useAdmin } from "../context/AdminContext"
 import { Department } from "../types/admin"
 import { DepartmentDialog } from "../components/DepartmentDialog"
@@ -25,9 +26,11 @@ import {
   AlertTriangle,
   ShieldCheck,
   FolderSync,
+  ExternalLink,
 } from "lucide-react"
 
 export const DepartmentsPage: React.FC = () => {
+  const navigate = useNavigate()
   const { departments, employees, archiveDepartment, restoreDepartment, deleteDepartment } = useAdmin()
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -174,16 +177,21 @@ export const DepartmentsPage: React.FC = () => {
               return (
               <div
                 key={dept.id}
-                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-md transition-shadow space-y-4 flex flex-col justify-between"
+                onClick={e => {
+                  if ((e.target as HTMLElement).closest("button")) return
+                  navigate(`/admin/departments/${dept.id}`)
+                }}
+                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700/60 transition-all cursor-pointer space-y-4 flex flex-col justify-between group"
               >
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors flex items-center gap-1.5">
                           {dept.name}
+                          <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500" />
                         </h3>
-                        <span className="font-mono text-xs px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 font-bold">
+                        <span className="font-mono text-xs px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800">
                           {dept.code}
                         </span>
                       </div>
@@ -228,36 +236,52 @@ export const DepartmentsPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Actions Toolbar: Edit, Archive, and Delete */}
+                {/* Actions Toolbar: View Department, Edit, Archive, and Delete */}
                 <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-1.5">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => navigate(`/admin/departments/${dept.id}`)}
+                    className="text-xs h-8 bg-indigo-600 hover:bg-indigo-700 text-white flex-1 flex items-center justify-center gap-1.5 shadow-sm"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>View Department</span>
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleEdit(dept)}
-                    className="text-xs h-8 flex-1"
+                    onClick={e => {
+                      e.stopPropagation()
+                      handleEdit(dept)
+                    }}
+                    className="text-xs h-8 px-2.5 text-slate-700 dark:text-slate-300"
+                    title="Edit Department"
                   >
-                    <Edit className="w-3.5 h-3.5 mr-1 text-slate-500" />
-                    Edit
+                    <Edit className="w-3.5 h-3.5" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleArchive(dept.id)}
-                    className="text-xs h-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                    onClick={e => {
+                      e.stopPropagation()
+                      handleArchive(dept.id)
+                    }}
+                    className="text-xs h-8 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/40"
                     title="Move to Archive"
                   >
-                    <Archive className="w-3.5 h-3.5 mr-1" />
-                    Archive
+                    <Archive className="w-3.5 h-3.5" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleDeleteClick(dept)}
-                    className="text-xs h-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                    onClick={e => {
+                      e.stopPropagation()
+                      handleDeleteClick(dept)
+                    }}
+                    className="text-xs h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
                     title="Permanently Delete Department"
                   >
-                    <Trash2 className="w-3.5 h-3.5 mr-1" />
-                    Delete
+                    <Trash2 className="w-3.5 h-3.5" />
                   </Button>
                 </div>
               </div>

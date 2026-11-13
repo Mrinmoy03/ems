@@ -43,6 +43,7 @@ import {
   ArrowRightCircle,
   FolderKanban,
   ExternalLink,
+  Lock,
 } from "lucide-react"
 import { useProjects } from "../../context/ProjectContext"
 import { DataPagination } from "@/components/common/DataPagination"
@@ -174,6 +175,9 @@ export const TaskTable: React.FC<TaskTableProps> = ({
 
   // Open progress update modal
   const handleOpenProgressModal = (task: EmployeeTask) => {
+    if (task.progress === 100 || task.status === "completed") {
+      return
+    }
     setEditingTask(task)
     setSelectedProgress(task.progress)
     setProgressComment(task.comment || "")
@@ -183,6 +187,10 @@ export const TaskTable: React.FC<TaskTableProps> = ({
   // Handle progress submission
   const handleSaveProgress = () => {
     if (!editingTask) return
+    if (editingTask.progress === 100 || editingTask.status === "completed") {
+      setEditingTask(null)
+      return
+    }
 
     const currentStatus = deriveTaskStatus(editingTask)
     // Rule: When an overdue task is updated, require a reason/comment in the UI
@@ -554,27 +562,36 @@ export const TaskTable: React.FC<TaskTableProps> = ({
                               <Info className="h-3.5 w-3.5 mr-2 text-slate-500" />
                               View Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setViewingTask(task)
-                                setEditedNoteText(task.comment || "")
-                                setIsEditingNote(true)
-                              }}
-                            >
-                              <FileEdit className="h-3.5 w-3.5 mr-2 text-amber-600" />
-                              {task.comment ? "Edit Delay Note" : "Add Delay Note"}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleOpenProgressModal(task)}>
-                              <Clock className="h-3.5 w-3.5 mr-2 text-blue-600" />
-                              Update Progress
-                            </DropdownMenuItem>
                             {!isCompleted && (
                               <DropdownMenuItem
-                                onClick={() => markTaskComplete(task.id)}
-                                className="text-emerald-700 focus:text-emerald-800"
+                                onClick={() => {
+                                  setViewingTask(task)
+                                  setEditedNoteText(task.comment || "")
+                                  setIsEditingNote(true)
+                                }}
                               >
-                                <CheckCircle className="h-3.5 w-3.5 mr-2 text-emerald-600" />
-                                Mark Completed
+                                <FileEdit className="h-3.5 w-3.5 mr-2 text-amber-600" />
+                                {task.comment ? "Edit Delay Note" : "Add Delay Note"}
+                              </DropdownMenuItem>
+                            )}
+                            {!isCompleted ? (
+                              <>
+                                <DropdownMenuItem onClick={() => handleOpenProgressModal(task)}>
+                                  <Clock className="h-3.5 w-3.5 mr-2 text-blue-600" />
+                                  Update Progress
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => markTaskComplete(task.id)}
+                                  className="text-emerald-700 focus:text-emerald-800"
+                                >
+                                  <CheckCircle className="h-3.5 w-3.5 mr-2 text-emerald-600" />
+                                  Mark Completed
+                                </DropdownMenuItem>
+                              </>
+                            ) : (
+                              <DropdownMenuItem disabled className="text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-60">
+                                <Lock className="h-3.5 w-3.5 mr-2 text-slate-400" />
+                                Completed (Locked)
                               </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>

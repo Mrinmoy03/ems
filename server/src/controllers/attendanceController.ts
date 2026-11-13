@@ -16,11 +16,14 @@ export const getAttendance = async (req: Request, res: Response): Promise<void> 
              a.punch_in,
              a.punch_out,
              a.total_duration_seconds,
+             a.lunch_break_seconds,
+             a.tea_break_seconds,
              a.status,
              a.created_at,
              a.updated_at,
              e.first_name,
              e.last_name,
+             e.avatar_url,
              e.employee_id as emp_code,
              d.name as department_name
       FROM attendance a

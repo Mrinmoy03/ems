@@ -1334,9 +1334,56 @@ A comprehensive automated integration test suite was executed against the live M
    - `ShiftAttendanceGrid.tsx` displays the exact break taken (e.g. `21m`) with subtitle `Timer was paused (not deducted)`.
    - Because the active timer is paused during lunch breaks, total working hours (`hours_worked`) are kept as the pure active working time without subtracting break duration a second time.
    - `useWorkingTimer.ts` passes cumulative `lunchBreakSeconds` and `totalDurationSeconds` on clock-out via `api.attendance.punchOut()`.
+8. **Admin Tasks Orchestration, Proper Category Separation & Custom Category**:
+   - Added `category VARCHAR(100) DEFAULT 'Feature Work'` column to MariaDB `tasks` table and `schema.sql`.
+   - In `taskController.ts` (`getAllTasks`), tasks are now ordered by `t.created_at DESC` so newest tasks appear at the top (`1st`).
+   - In `TasksPage.tsx`:
+     - Added dedicated `Department` column alongside the `Category` column so the department and initiative category are cleanly distinguished.
+     - Fixed assignment origin badge: correctly badges self-assigned tasks created by employees as `Self-Assigned` (emerald badge) and admin-assigned tasks as `Admin Assigned` (indigo badge).
+   - In `TaskAssignmentDialog.tsx`:
+     - Added "+ Add New Category..." dropdown option and inline "+ Add New Category" / "Select Existing" toggle.
+     - Allows administrators to dynamically type and assign custom categories that persist directly into MariaDB `tasks.category`.
+   - In `AdminContext.tsx` & `EmployeeContext.tsx`:
+     - Synced `category`, `departmentName`, `department`, and `isSelfCreated` correctly to ensure complete consistency across Employee Hub and Admin Portal.
+9. **Completed Task Immutability & Late Submission Telemetry**:
+   - **Late Submission Display in Admin Panel (`TasksPage.tsx`)**:
+     - `TaskStatusBadge` now receives `isLate={isTaskCompletedLate(task)}`, accurately displaying amber `Completed (Late)` for deliverables finished after their scheduled milestone.
+     - The `Scheduled Deadline` column renders both the original milestone and the exact submission time (`Submitted: <datetime>`) alongside a clear `Late` or `On Time` tag.
+   - **Immutability of Completed Deliverables (Both Admin and Employee)**:
+     - Admin deadline modification is permanently disabled on completed tasks: the `Modify Deadline` button is replaced by a `Locked (Completed)` badge with lock icon. Both `DeadlineChangeDialog.tsx` and `taskController.updateTaskDeadline` reject deadline alteration on completed records.
+     - Employee progress updates are permanently disabled on completed tasks: the dropdown menu disables progress update actions with a `Completed (Locked)` indicator. Both `TaskTable.tsx`, `EmployeeContext.updateTaskProgress`, and `taskController.updateTaskProgress` reject progress modifications on finalized deliverables.
+10. **Department Details Exploration Workspace (`/admin/departments/:id`)**:
+   - **Direct Navigation**: Clicking any department card or clicking the new "View Department" action in `DepartmentsPage.tsx` navigates to `/admin/departments/:departmentId`.
+   - **Department KPI Telemetry**: Provides header cards tracking total department members, current active tasks, past completed deliverables, and assigned project work packages.
+   - **Full Task Lifecycle Grid (`Current Tasks` vs `Past Tasks`)**:
+     - Sub-filters: `All Tasks`, `Current Tasks` (in-progress/pending/overdue), and `Past Tasks` (completed deliverables).
+     - Search & priority filters.
+     - Full delivery matrix: Initiative title, assigned employee name & avatar, defined category, priority, status badge (`Completed`, `Completed (Late)`), Delivery Time (scheduled deadline), and Completed Time (exact submission timestamp with late/on-time badge).
+   - **Department Employees Roster**: Complete roster of all employees in the department with designation, email, phone, location, active task workload count, and direct link to their individual profile.
+   - **Project Work Packages Section**: Lists all project parts/packages assigned to the department or its employees, with weight contribution, completion progress, deadline, and direct navigation into the project workspace.
 
 
 
 
 
 
+
+
+
+
+
+11. **Historical & Monthly Attendance Telemetry & Accurate Break Time Tracking**:
+    - **Dynamic Break Time Inclusion in Attendance Logs**:
+      - Updated `server/src/controllers/attendanceController.ts` (`getAttendance`): Added `a.lunch_break_seconds`, `a.tea_break_seconds`, and `e.avatar_url` into the SQL selection query.
+      - Updated `client/src/admin/context/AdminContext.tsx`: Replaced hardcoded `"0 mins"` with dynamic calculation:
+        `const breakSecs = (Number(a.lunch_break_seconds) || 0) + (Number(a.tea_break_seconds) || 0)`
+        `const breakMins = Math.round(breakSecs / 60)`
+        `const breakDuration = breakMins > 0 ? \`${breakMins} mins\` : "0 mins"`
+      - In `AttendancePage.tsx`, non-zero breaks (e.g. `21 mins`) are badged with a distinct amber pill with coffee icon, and included directly in CSV exports (`Break Time` and `Break Minutes`).
+    - **Historical & Monthly Filtering Suite (`AttendancePage.tsx`)**:
+      - Serves both **Admin** (`/admin/attendance`) and **Super Admin** (`/super-admin/attendance`).
+      - **Quick Period Presets**: Instant one-click buttons for `All Records`, `Today`, `Previous Day (Yesterday)`, `This Month`, and `Previous Month`.
+      - **Calendar Date Picker**: `<Input type="date" />` allowing pinpoint single-day filtering for any past or future date, accompanied by a quick-clear button.
+      - **Monthly Attendance Dropdown**: Populated with the past 12 months as well as any distinct months detected in historical logs (e.g. `November 2026`, `October 2026`).
+      - **Active Filter Period Banner**: Displays the active date/month, matched entry count, total net working hours, and cumulative break duration with a one-click reset action.
+      - **Dynamic Summary KPI Badges**: Total Present, Total Shift Hours, Total Break Time, and Average Shift Duration dynamically recalculate based on the filtered view.

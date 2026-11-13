@@ -7,6 +7,8 @@ export interface EmployeeTask {
   title: string
   description?: string
   category?: string
+  department?: string
+  departmentName?: string
   deadline: string // ISO date-time string
   status: TaskStatus
   progress: TaskProgress

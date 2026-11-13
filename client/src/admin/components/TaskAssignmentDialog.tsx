@@ -21,7 +21,7 @@ import {
 import { useAdmin } from "../context/AdminContext"
 import { useProjects } from "../../context/ProjectContext"
 import { CreateAdminTaskInput } from "../types/admin"
-import { CheckSquare, Users, Calendar, AlertCircle, FolderKanban } from "lucide-react"
+import { CheckSquare, Users, Calendar, AlertCircle, FolderKanban, Tag } from "lucide-react"
 
 interface TaskAssignmentDialogProps {
   open: boolean
@@ -44,6 +44,8 @@ export const TaskAssignmentDialog: React.FC<TaskAssignmentDialogProps> = ({
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [category, setCategory] = useState("Feature Development")
+  const [isCustomCategory, setIsCustomCategory] = useState(false)
+  const [customCategory, setCustomCategory] = useState("")
   const [priority, setPriority] = useState<"low" | "medium" | "high" | "urgent">("medium")
 
   // Project association
@@ -103,12 +105,18 @@ export const TaskAssignmentDialog: React.FC<TaskAssignmentDialogProps> = ({
       return
     }
 
+    const finalCategory = isCustomCategory ? customCategory.trim() : category
+    if (isCustomCategory && !finalCategory) {
+      setError("Please specify the custom category name")
+      return
+    }
+
     const partMatch = activeProject?.parts.find(p => p.id === selectedPartId)
 
     const input: CreateAdminTaskInput = {
       title: title.trim(),
       description: description.trim() || undefined,
-      category,
+      category: finalCategory || "Feature Development",
       deadline: new Date(deadline).toISOString(),
       assignedTo: selectedAssignees,
       priority,
@@ -125,6 +133,8 @@ export const TaskAssignmentDialog: React.FC<TaskAssignmentDialogProps> = ({
     setSelectedAssignees([])
     setSelectedProjectId("none")
     setSelectedPartId("none")
+    setIsCustomCategory(false)
+    setCustomCategory("")
     setError(null)
     onOpenChange(false)
   }
@@ -170,23 +180,72 @@ export const TaskAssignmentDialog: React.FC<TaskAssignmentDialogProps> = ({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="taskCategory" className="text-xs font-semibold">
-                Category
-              </Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger id="taskCategory">
-                  <SelectValue placeholder="Select Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Feature Development">Feature Development</SelectItem>
-                  <SelectItem value="Bug Fix & Remediation">Bug Fix & Remediation</SelectItem>
-                  <SelectItem value="System Architecture">System Architecture</SelectItem>
-                  <SelectItem value="Performance & Optimization">Performance & Optimization</SelectItem>
-                  <SelectItem value="Design & UX Polish">Design & UX Polish</SelectItem>
-                  <SelectItem value="Documentation & Auditing">Documentation & Auditing</SelectItem>
-                  <SelectItem value="Security Hardening">Security Hardening</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="taskCategory" className="text-xs font-semibold flex items-center gap-1">
+                  <Tag className="w-3 h-3 text-indigo-500" />
+                  Category
+                </Label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCustomCategory(!isCustomCategory)
+                    if (!isCustomCategory) setCustomCategory("")
+                  }}
+                  className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-medium flex items-center gap-0.5"
+                >
+                  {isCustomCategory ? "Select Existing" : "+ Add New Category"}
+                </button>
+              </div>
+
+              {isCustomCategory ? (
+                <div className="relative">
+                  <Input
+                    id="customCategory"
+                    value={customCategory}
+                    onChange={e => setCustomCategory(e.target.value)}
+                    placeholder="Enter new category name..."
+                    className="text-xs pr-7"
+                    autoFocus
+                  />
+                  {customCategory && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomCategory("")}
+                      className="absolute right-2 top-2.5 text-slate-400 hover:text-slate-600 text-xs font-bold leading-none"
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <Select
+                  value={category}
+                  onValueChange={val => {
+                    if (val === "__new__") {
+                      setIsCustomCategory(true)
+                      setCustomCategory("")
+                    } else {
+                      setCategory(val)
+                    }
+                  }}
+                >
+                  <SelectTrigger id="taskCategory">
+                    <SelectValue placeholder="Select Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Feature Development">Feature Development</SelectItem>
+                    <SelectItem value="Bug Fix & Remediation">Bug Fix & Remediation</SelectItem>
+                    <SelectItem value="System Architecture">System Architecture</SelectItem>
+                    <SelectItem value="Performance & Optimization">Performance & Optimization</SelectItem>
+                    <SelectItem value="Design & UX Polish">Design & UX Polish</SelectItem>
+                    <SelectItem value="Documentation & Auditing">Documentation & Auditing</SelectItem>
+                    <SelectItem value="Security Hardening">Security Hardening</SelectItem>
+                    <SelectItem value="__new__" className="text-indigo-600 font-medium">
+                      + Add New Category...
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div className="space-y-1.5">
