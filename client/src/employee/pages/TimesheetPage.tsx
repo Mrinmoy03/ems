@@ -110,6 +110,9 @@ export const TimesheetPage: React.FC = () => {
           const formattedHours = formatDurationToHuman(durSec)
           const inFormatted = a.punch_in ? new Date(a.punch_in).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"
           const outFormatted = a.punch_out ? new Date(a.punch_out).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"
+          const shiftBreakSec = (Number(a.lunch_break_seconds) || 0) + (Number(a.tea_break_seconds) || 0)
+          const shiftBreakMins = Math.round(shiftBreakSec / 60)
+          const breakDuration = shiftBreakMins > 0 ? `${shiftBreakMins} mins` : "0 mins"
 
           return {
             id: `shift-${a.id}`,
@@ -117,7 +120,7 @@ export const TimesheetPage: React.FC = () => {
             dayOfWeek: format(shiftDateObj, "EEEE"),
             inTime: inFormatted,
             outTime: outFormatted,
-            breakDuration: "0 mins",
+            breakDuration,
             totalHours: formattedHours,
             status: "Completed",
             tasksCompletedCount: shiftTasks.length,

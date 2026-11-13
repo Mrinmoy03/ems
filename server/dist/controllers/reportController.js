@@ -131,7 +131,10 @@ const getEodReports = async (req, res) => {
              d.name as department_name,
              a.punch_in as check_in_time,
              a.punch_out as check_out_time,
-             a.total_duration_seconds
+             a.total_duration_seconds,
+             COALESCE(a.lunch_break_seconds, 0) as lunch_break_seconds,
+             COALESCE(a.tea_break_seconds, 0) as tea_break_seconds,
+             (COALESCE(a.lunch_break_seconds, 0) + COALESCE(a.tea_break_seconds, 0)) as break_seconds
       FROM eod_reports r
       JOIN employees e ON r.employee_id = e.id
       LEFT JOIN departments d ON e.department_id = d.id

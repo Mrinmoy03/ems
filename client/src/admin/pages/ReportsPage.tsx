@@ -72,6 +72,10 @@ export const ReportsPage: React.FC = () => {
             ? new Date(row.check_out_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
             : (row.punch_out ? new Date(row.punch_out).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—")
 
+          const totalBreakSec = Number(row.break_seconds) || ((Number(row.lunch_break_seconds) || 0) + (Number(row.tea_break_seconds) || 0))
+          const breakMins = Math.round(totalBreakSec / 60)
+          const breakFormatted = breakMins > 0 ? `${breakMins}m` : (row.break_duration || "0m")
+
           return {
             id: row.id,
             employeeId: row.emp_code || row.employee_id,
@@ -83,7 +87,7 @@ export const ReportsPage: React.FC = () => {
             dayOfWeek,
             checkIn: checkInFormatted,
             checkOut: checkOutFormatted,
-            breakDuration: "0m",
+            breakDuration: breakFormatted,
             hoursLogged: `${Number(row.hours_worked || 8).toFixed(1)}h`,
             hoursWorked: Number(row.hours_worked) || 8,
             tasksTotal: completedTasksList.length,

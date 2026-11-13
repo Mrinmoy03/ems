@@ -103,7 +103,7 @@ export const ShiftAttendanceGrid: React.FC<ShiftAttendanceGridProps> = ({
             {timing.breakFormatted}
           </span>
           <span className="text-[9px] text-amber-600/90 dark:text-amber-400/90 block font-medium">
-            {timing.breakMinutes > 0 ? "Timer paused during break" : "No break recorded"}
+            {timing.breakMinutes > 0 ? "Timer was paused (not deducted)" : "No break recorded"}
           </span>
         </div>
       </div>

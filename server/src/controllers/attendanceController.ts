@@ -177,14 +177,21 @@ export const punchOut = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    const lunchBreakSeconds = Number(req.body?.lunchBreakSeconds ?? req.body?.breakSeconds) || 0;
+    const providedTotalDuration = Number(req.body?.totalDurationSeconds) || 0;
+
     const punchInDate = new Date(existing[0].punch_in);
-    const durationSeconds = Math.max(0, Math.floor((now.getTime() - punchInDate.getTime()) / 1000));
+    const grossSeconds = Math.max(0, Math.floor((now.getTime() - punchInDate.getTime()) / 1000));
+    // Active work timer duration is preserved without false re-deductions
+    const durationSeconds = providedTotalDuration > 0
+      ? providedTotalDuration
+      : Math.max(0, grossSeconds - lunchBreakSeconds);
 
     await pool.query(
       `UPDATE attendance
-       SET punch_out = ?, total_duration_seconds = ?
+       SET punch_out = ?, total_duration_seconds = ?, lunch_break_seconds = GREATEST(COALESCE(lunch_break_seconds, 0), ?)
        WHERE id = ?`,
-      [now, durationSeconds, existing[0].id]
+      [now, durationSeconds, lunchBreakSeconds, existing[0].id]
     );
 
     // Auto-sync completed shift to eod_reports

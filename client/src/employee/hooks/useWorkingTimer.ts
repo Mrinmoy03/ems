@@ -207,8 +207,18 @@ export function useWorkingTimer(employeeId?: string) {
       }
     })
 
+    const recordedBreakSec = session.breaks.reduce((acc, b) => acc + (b.durationSeconds || 0), 0)
+    let totalBreakSec = recordedBreakSec
+    if (session.sessionState === "on-break" && session.currentBreakStart) {
+      const extraBreak = Math.max(0, Math.floor((new Date(nowIso).getTime() - new Date(session.currentBreakStart).getTime()) / 1000))
+      totalBreakSec += extraBreak
+    }
+
     if (employeeId) {
-      api.attendance.punchOut(employeeId)
+      api.attendance.punchOut(employeeId, {
+        lunchBreakSeconds: totalBreakSec,
+        totalDurationSeconds: elapsedSeconds,
+      })
         .then(() => {
           try {
             const ch = new BroadcastChannel("worktrack_attendance")

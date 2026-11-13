@@ -143,8 +143,6 @@ export function calculateNetShiftHours(
     netHoursDecimal,
     formulaExplanation: isLive
       ? "Active shift timer (pauses automatically during break)"
-      : breakMinutes > 0
-      ? `${grossFormatted} gross − ${breakMinutes}m break = ${netHoursFormatted} net worked`
       : `${netHoursFormatted} logged work duration`,
   }
 }

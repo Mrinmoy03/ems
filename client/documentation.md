@@ -1328,10 +1328,12 @@ A comprehensive automated integration test suite was executed against the live M
    - Eliminates hardcoded metrics (no false 47.5h or 20 tasks; accurately reflects attended shifts: Nov 9 completed 4.49h + Nov 12 active session).
 5. **Flexible Employee Route Parameters**:
    - Normalized `getEmployeeById` to support clean IDs, dashed codes (`EMP-5512`), and space-separated codes (`EMP 5512`).
-6. **Robust Status & Conflict Validation**:
-   - Duplicate department code creation now returns `409 Conflict`.
-   - Super Admin leave decision endpoint accepts both `decision` and `status` payloads.
-   - Project creation accurately persists multi-part deliverables in `project_parts`.
+7. **Break Duration Display & Zero Double-Deduction Architecture**:
+   - `attendance` table's `lunch_break_seconds` and `tea_break_seconds` are dynamically returned by `reportController.ts` in `GET /api/reports/eod`.
+   - Prevented double-counting in client report views by strictly evaluating `row.break_seconds || (row.lunch_break_seconds + row.tea_break_seconds)`.
+   - `ShiftAttendanceGrid.tsx` displays the exact break taken (e.g. `21m`) with subtitle `Timer was paused (not deducted)`.
+   - Because the active timer is paused during lunch breaks, total working hours (`hours_worked`) are kept as the pure active working time without subtracting break duration a second time.
+   - `useWorkingTimer.ts` passes cumulative `lunchBreakSeconds` and `totalDurationSeconds` on clock-out via `api.attendance.punchOut()`.
 
 
 

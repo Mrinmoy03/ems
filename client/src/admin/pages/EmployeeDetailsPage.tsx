@@ -104,13 +104,17 @@ export const EmployeeDetailsPage: React.FC = () => {
             isLate: false,
           }))
 
+          const totalBreakSec = Number(row.break_seconds) || ((Number(row.lunch_break_seconds) || 0) + (Number(row.tea_break_seconds) || 0))
+          const breakMins = Math.round(totalBreakSec / 60)
+          const breakFormatted = breakMins > 0 ? `${breakMins}m` : (row.break_duration || "0m")
+
           return {
             id: row.id,
             date: typeof row.date === "string" ? row.date.slice(0, 10) : new Date(row.date).toISOString().slice(0, 10),
             dayOfWeek,
             checkIn: row.check_in_time ? new Date(row.check_in_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "09:00 AM",
             checkOut: row.check_out_time ? new Date(row.check_out_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : (row.punch_out ? new Date(row.punch_out).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "06:00 PM"),
-            breakDuration: "45m",
+            breakDuration: breakFormatted,
             hoursLogged: `${Number(row.hours_worked || 8).toFixed(1)}h`,
             hoursWorked: Number(row.hours_worked) || 8,
             tasksTotal: completedTasksList.length,

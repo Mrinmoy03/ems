@@ -134,12 +134,12 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ employeeId }),
       }),
-    punchOut: (employeeId: string) =>
+    punchOut: (employeeId: string, data?: { lunchBreakSeconds?: number; breakSeconds?: number; totalDurationSeconds?: number }) =>
       request<{ success: boolean; message: string; punchOutTime: string; durationSeconds: number }>(
         "/attendance/punch-out",
         {
           method: "POST",
-          body: JSON.stringify({ employeeId }),
+          body: JSON.stringify({ employeeId, ...(data || {}) }),
         }
       ),
   },
